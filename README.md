@@ -30,7 +30,7 @@ The core job of the system is to answer:
 
 `Do management claims match the reported numbers?`
 
-That framing creates a clean, interview-friendly story:
+That framing creates a clean, explainable story:
 
 - SQL answers metric-heavy questions
 - retrieval answers commentary-heavy questions
