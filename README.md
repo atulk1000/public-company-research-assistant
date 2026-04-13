@@ -1,100 +1,235 @@
 # Public Company Research Assistant
 
-A hybrid SQL + RAG analyst that answers questions about public companies using structured SEC/XBRL data and unstructured filings, letters, and management commentary, with grounded citations.
+A hybrid SQL + RAG research assistant for public companies. It ingests structured SEC/XBRL metrics and unstructured SEC filing text, routes questions across SQL, retrieval, or both, and uses an LLM to produce grounded answers with citations and limitations.
 
-## Why This Project
+Current source policy:
 
-Financial research questions rarely live in one modality. Some require precise structured metrics, others require qualitative evidence from filings, and many require both. This project routes questions across SQL and retrieval, then composes grounded answers with citations.
+- official SEC filed data only
+- no third-party finance sites, blogs, or unofficial transcript aggregators in the current version
 
-This repo is designed to showcase:
+## What It Demonstrates
 
-- relational data modeling for company and filing data
-- ingestion and chunking of unstructured documents
-- hybrid retrieval over lexical and semantic signals
-- query routing across SQL, retrieval, and hybrid reasoning
-- evaluation of answer quality, grounding, and routing behavior
+- structured data ingestion from SEC submissions and company facts
+- relational modeling in Postgres
+- unstructured filing ingestion, cleaning, and chunking
+- real embeddings stored in `pgvector`
+- hybrid retrieval across lexical and vector signals
+- LLM-based routing, SQL generation, and final answer synthesis
+- evidence-backed answers over both numeric and text sources
 
-## v1 Scope
+## Current Scope
 
-The first iteration is intentionally narrow so it feels like a real analyst tool instead of a generic chatbot.
+The current local dataset covers:
 
-- Companies: Microsoft, Alphabet, Amazon
-- Metrics: revenue growth, gross margin, operating margin, capex as % revenue, R&D as % revenue
-- Documents: 10-K / 10-Q plus curated shareholder letters or management commentary
-- UI: FastAPI backend plus a lightweight Streamlit interface
-- Eval set: 15 benchmark questions covering SQL-only, retrieval-only, and hybrid workflows
+- `MSFT`
+- `GOOGL`
+- `AMZN`
 
-## Narrative vs Numbers Angle
+Current structured sources:
 
-The core job of the system is to answer:
+- SEC submissions metadata
+- SEC company facts / XBRL data
+- fact-backed annual and quarterly forms such as `10-K`, `10-Q`, `20-F`, and `40-F` plus amendments
 
-`Do management claims match the reported numbers?`
+Current unstructured sources:
 
-That framing creates a clean, explainable story:
+- recent `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`, `40-F`, `DEF 14A`, and `S-1` / `S-3` / `S-4` filings
 
-- SQL answers metric-heavy questions
-- retrieval answers commentary-heavy questions
-- hybrid reasoning handles questions that need both
+Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), then loaded into Postgres for analysis and retrieval.
+Those raw SEC files stay local by default because [data/raw](./data/raw) is gitignored.
 
 ## Architecture
 
-1. `ingestion/` pulls structured SEC data and normalizes documents.
-2. `db/` stores relational tables, derived metrics, and vector-enabled chunks.
-3. `retrieval/` runs lexical, vector, and hybrid search.
-4. `agent/` routes each question and orchestrates SQL / RAG tools.
-5. `app/` exposes an API and a simple UI.
-6. `evals/` runs benchmark questions and captures results.
+```text
+SEC APIs / filing documents
+        |
+        v
+raw JSON + HTML on disk (data/raw/sec)
+        |
+        v
+structured loaders + filing text parser
+        |
+        v
+Postgres + pgvector
+  - companies
+  - filings
+  - facts
+  - derived_metrics
+  - documents
+  - document_chunks
+        |
+        v
+LLM router -> SQL tool / retrieval tool / hybrid orchestration
+        |
+        v
+LLM answer synthesis with citations and limitations
+```
 
-See [docs/architecture.md](docs/architecture.md) and [docs/build_plan.md](docs/build_plan.md) for the concrete implementation plan.
+Key modules:
+
+- [ingestion](./ingestion): SEC fetchers, raw-file persistence, filing parsing, chunking, embeddings
+- [db](./db): schema, views, seed data
+- [agent](./agent): company catalog, routing, SQL generation, retrieval, answer composition
+- [retrieval](./retrieval): lexical search and reranking helpers
+- [app](./app): FastAPI API and Streamlit demo UI
+- [evals](./evals): benchmark scaffolding for offline evaluation
+
+## Current End-to-End Flow
+
+1. Load filings and company facts from the SEC for the active company set.
+2. Save raw JSON and filing HTML to disk.
+3. Normalize facts and compute derived metrics in Postgres.
+4. Parse filing text, chunk it, and store chunk embeddings in `pgvector`.
+5. Ask a question through the API or Streamlit UI.
+6. Let the LLM decide whether the question is `sql`, `rag`, or `hybrid`.
+7. Generate SQL when needed, retrieve filing passages when needed, then synthesize the final answer with the LLM.
+
+## Source Policy
+
+The current app intentionally uses only official SEC-hosted company filings and SEC API data. This keeps the evidence set low-noise and reproducible while the core hybrid reasoning workflow is being built out.
+
+Used now:
+
+- SEC submissions metadata
+- SEC XBRL / company facts
+- SEC-hosted filing documents
+
+Not used yet:
+
+- third-party market-data websites
+- unofficial earnings-call transcript sites
+- finance blogs or media summaries
+- non-SEC investor-relations sources such as decks or press-release pages
 
 ## Local Setup
 
-```bash
+### 1. Create a virtual environment
+
+```powershell
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env
 ```
 
-Start the API:
+### 2. Create your local env file
 
-```bash
-uvicorn app.api:app --reload
+```powershell
+Copy-Item .env.example .env
 ```
 
-Start the Streamlit UI:
+Set these values in [`.env`](./.env):
 
-```bash
-streamlit run app/ui_streamlit.py
+```env
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-5-mini
+OPENAI_REASONING_EFFORT=low
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/company_assistant
+EMBEDDING_MODEL=text-embedding-3-small
+SEC_USER_AGENT=Public Company Research Assistant your-email@example.com
 ```
 
-Run the starter evaluation:
+Important:
 
-```bash
-python evals/run_eval.py
+- if you run the app in Docker, use `postgres` as the database host
+- if you run Python directly on your machine, use `localhost`
+- do not commit your real `.env`
+
+### 3. Start the local stack
+
+```powershell
+docker compose up -d
 ```
 
-## Demo Questions
+Services:
 
-- Which company had the highest operating margin in the latest reported quarter?
-- How has capex intensity changed for Microsoft over the last four quarters?
-- What themes dominate Alphabet's latest management commentary around AI?
-- Compare Microsoft and Amazon on cloud-related narrative and revenue trend.
-- Which company had improving margins but cautious management tone?
+- API: [http://localhost:8000](http://localhost:8000)
+- Streamlit UI: [http://localhost:8501](http://localhost:8501)
+- Postgres: `localhost:5432`
 
-## Evaluation Goals
+## Ingestion Workflow
 
-The repo should report:
+Apply the schema and views if needed:
 
-- routing accuracy
-- citation coverage
-- groundedness
-- answer correctness
+```powershell
+docker compose exec postgres psql -U postgres -d company_assistant -f /app/db/schema.sql
+docker compose exec postgres psql -U postgres -d company_assistant -f /app/db/seed.sql
+docker compose exec postgres psql -U postgres -d company_assistant -f /app/db/views.sql
+```
 
-## Next Build Steps
+Load structured SEC data:
 
-- finish SEC ingestion for 3 target companies
-- create derived metric views in Postgres
-- add document chunking and embeddings
-- wire live OpenAI responses with citations
-- add reranking and answer-level evaluation
+```powershell
+docker compose run --rm api python ingestion/load_sec_data.py
+```
+
+Load filing text and chunk it:
+
+```powershell
+docker compose run --rm api python ingestion/load_filing_texts.py
+```
+
+Generate embeddings for all chunks:
+
+```powershell
+docker compose run --rm api python ingestion/embed_chunks.py
+```
+
+The current pipeline writes:
+
+- raw SEC JSON and filing HTML to [data/raw/sec](./data/raw/sec)
+- structured metrics to Postgres, including non-USD annual / quarterly fact sets where available
+- filing chunks to `document_chunks`
+- embeddings to `document_chunks.embedding`
+
+## How To Test
+
+### UI
+
+Open [http://localhost:8501](http://localhost:8501) and try:
+
+- `Which company had the highest operating margin in the latest reported quarter?`
+- `How has capex intensity changed for Microsoft over the last four quarters?`
+- `What themes dominate Alphabet management commentary around AI?`
+- `Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters.`
+
+### API
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/ask" `
+  -ContentType "application/json" `
+  -Body '{"question":"Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters."}'
+```
+
+## Example Capabilities
+
+- SQL-only reasoning over `v_company_period_metrics`
+- vector + lexical retrieval over real filing text
+- hybrid reasoning that combines numeric trends with management commentary
+- company-aware retrieval when a question names multiple companies
+- quarter-aware SQL validation for quarter-based questions
+- broader SEC offline ingestion across domestic, foreign-issuer, event, proxy, and registration statement filings
+
+## Current Limitations
+
+- the company universe is still intentionally small for local iteration
+- non-SEC sources such as transcripts, investor decks, and IR-hosted earnings releases are not ingested yet
+- retrieval quality is strong enough for demos, but still improvable
+- the Streamlit UI is an MVP, not a polished production frontend
+- evaluation exists as scaffolding and should be expanded into a fuller benchmark report
+
+## Why This Repo Is Useful
+
+This project is meant to show more than prompt engineering. It demonstrates an end-to-end system for:
+
+- modeling structured and unstructured data together
+- deciding when SQL, retrieval, or hybrid reasoning is appropriate
+- grounding LLM answers in actual source evidence
+- building a reproducible local workflow with raw data, a database, and a queryable application
+
+## Next Improvements
+
+- add more public data sources such as `8-K` exhibits, proxy statements, earnings call transcripts, and investor presentations
+- improve section-aware parsing for filings
+- expand benchmark questions and retrieval-quality evaluation
+- improve citation rendering and analyst-style presentation in the UI

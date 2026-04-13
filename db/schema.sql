@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS derived_metrics (
     period_end DATE NOT NULL,
     fiscal_year INTEGER,
     fiscal_quarter TEXT,
+    currency TEXT,
     revenue NUMERIC,
     revenue_growth_yoy NUMERIC,
     gross_margin NUMERIC,
@@ -65,7 +66,7 @@ CREATE TABLE IF NOT EXISTS documents (
 
 CREATE TABLE IF NOT EXISTS document_chunks (
     chunk_id BIGSERIAL PRIMARY KEY,
-    document_id BIGINT NOT NULL REFERENCES documents(document_id),
+    document_id BIGINT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
     company_id INTEGER NOT NULL REFERENCES companies(company_id),
     chunk_index INTEGER NOT NULL,
     section_name TEXT,

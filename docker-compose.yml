@@ -10,6 +10,58 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db:/app/db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: company-assistant-api
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./agent:/app/agent
+      - ./retrieval:/app/retrieval
+      - ./db:/app/db
+      - ./data:/app/data
+      - ./ingestion:/app/ingestion
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: company-assistant-ui
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+      - api
+    volumes:
+      - ./app:/app/app
+      - ./agent:/app/agent
+      - ./retrieval:/app/retrieval
+      - ./db:/app/db
+      - ./data:/app/data
+      - ./ingestion:/app/ingestion
+    command: streamlit run app/ui_streamlit.py --server.port=8501 --server.address=0.0.0.0
 
 volumes:
   postgres_data:

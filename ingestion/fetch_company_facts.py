@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import httpx
 
+from ingestion.sec_api import sec_headers
+
 
 def company_facts_url(cik: str) -> str:
     return f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
 
 def fetch_company_facts(cik: str) -> dict:
-    with httpx.Client(timeout=30.0, headers={"User-Agent": "public-company-research-assistant"}) as client:
+    with httpx.Client(timeout=30.0, headers=sec_headers()) as client:
         response = client.get(company_facts_url(cik))
         response.raise_for_status()
         return response.json()
