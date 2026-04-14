@@ -38,6 +38,25 @@ Current unstructured sources:
 Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), then loaded into Postgres for analysis and retrieval.
 Those raw SEC files stay local by default because [data/raw](./data/raw) is gitignored.
 
+## App Modes
+
+The Streamlit app has two user-facing modes:
+
+- `Use live analysis` off: answer only from companies that are already loaded in the local Postgres + `pgvector` store
+- `Use live analysis` on: resolve the company from the question, fetch official SEC data for that one company on demand if needed, then run SQL, retrieval, or hybrid analysis
+
+The current app prompt is:
+
+- `Ask a question about any US public company finances`
+
+In live mode, the app may:
+
+1. extract the likely company / ticker from the question
+2. validate it against the SEC company reference list
+3. ingest or refresh that company locally
+4. run SQL, RAG, or hybrid analysis
+5. return a grounded answer with evidence and limitations
+
 ## Architecture
 
 ```text
@@ -83,6 +102,19 @@ Key modules:
 5. Ask a question through the API or Streamlit UI.
 6. Let the LLM decide whether the question is `sql`, `rag`, or `hybrid`.
 7. Generate SQL when needed, retrieve filing passages when needed, then synthesize the final answer with the LLM.
+
+## Live Analysis Flow
+
+When `Use live analysis` is enabled, the request path is:
+
+1. planner extracts the likely company, ticker, route, and source needs
+2. resolver validates the company against the cached SEC company list
+3. the app checks whether local data for that company is fresh enough
+4. if needed, it fetches official SEC data for that company and loads it into Postgres / `pgvector`
+5. SQL, retrieval, or hybrid analysis runs against the refreshed local store
+6. the LLM writes the final answer from the retrieved evidence
+
+This lets the app stay lightweight locally while still supporting on-demand analysis for companies that are not preloaded.
 
 ## Source Policy
 
@@ -187,10 +219,13 @@ The current pipeline writes:
 
 Open [http://localhost:8501](http://localhost:8501) and try:
 
+- turn `Use live analysis` on for on-demand company resolution + ingestion
+- turn it off to answer only from the already loaded local dataset
 - `Which company had the highest operating margin in the latest reported quarter?`
 - `How has capex intensity changed for Microsoft over the last four quarters?`
 - `What themes dominate Alphabet management commentary around AI?`
 - `Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters.`
+- `What did Apple say about AI in its latest filings?`
 
 ### API
 
@@ -198,7 +233,7 @@ Open [http://localhost:8501](http://localhost:8501) and try:
 Invoke-RestMethod -Method Post `
   -Uri "http://localhost:8000/ask" `
   -ContentType "application/json" `
-  -Body '{"question":"Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters."}'
+  -Body '{"question":"Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters.","live_analysis":true}'
 ```
 
 ## Example Capabilities
