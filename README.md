@@ -43,7 +43,7 @@ Those raw SEC files stay local by default because [data/raw](./data/raw) is giti
 The Streamlit app has two user-facing modes:
 
 - `Use live analysis` off: answer only from companies that are already loaded in the local Postgres + `pgvector` store
-- `Use live analysis` on: resolve the company from the question, fetch official SEC data for that one company on demand if needed, then run SQL, retrieval, or hybrid analysis
+- `Use live analysis` on: resolve the company from the question, intelligently select and fetch the most relevant official SEC sources for that company, then run SQL, retrieval, or hybrid analysis
 
 The current app prompt is:
 
