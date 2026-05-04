@@ -139,6 +139,7 @@ def answer_question_live(
             "structured_counts": live_result.structured_counts,
             "document_counts": live_result.document_counts,
             "embedding_counts": live_result.embedding_counts,
+            "freshness": live_result.freshness,
         },
     }
 

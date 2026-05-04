@@ -299,6 +299,15 @@ def render_live_ingestion(result: dict) -> None:
     count_cols[2].metric("Documents", live_ingestion.get("document_counts", {}).get("documents", 0))
     count_cols[3].metric("Embedded Chunks", live_ingestion.get("embedding_counts", {}).get("updated_chunks", 0))
 
+    freshness = live_ingestion.get("freshness") or {}
+    if freshness:
+        st.caption(
+            "Last refreshed: "
+            f"structured={freshness.get('structured_last_refreshed_at') or 'n/a'} | "
+            f"documents={freshness.get('documents_last_refreshed_at') or 'n/a'} | "
+            f"embeddings={freshness.get('embeddings_last_refreshed_at') or 'n/a'}"
+        )
+
 
 def render_debug_section(result: dict) -> None:
     with st.expander("Debug payload"):

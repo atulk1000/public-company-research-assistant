@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     end_char INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS company_data_freshness (
+    company_id INTEGER PRIMARY KEY REFERENCES companies(company_id) ON DELETE CASCADE,
+    structured_last_refreshed_at TIMESTAMPTZ,
+    documents_last_refreshed_at TIMESTAMPTZ,
+    embeddings_last_refreshed_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS qa_eval_set (
     question_id SERIAL PRIMARY KEY,
     question TEXT NOT NULL,

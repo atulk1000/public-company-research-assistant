@@ -1,6 +1,14 @@
 # Public Company Research Assistant
 
-A hybrid SQL + RAG research assistant for public companies. It ingests structured SEC/XBRL metrics and unstructured SEC filing text, routes questions across SQL, retrieval, or both, and uses an LLM to produce grounded answers with citations and limitations.
+A hybrid SQL + RAG research assistant for US public companies. It ingests structured SEC/XBRL metrics and unstructured SEC filing text, routes questions across SQL, retrieval, or both, and uses an LLM to produce grounded answers with citations and limitations.
+
+This is intentionally built as a real data system rather than a thin chatbot wrapper:
+
+- raw SEC files are persisted locally
+- structured facts are normalized into Postgres
+- filing text is chunked and embedded into `pgvector`
+- new companies fetched in live mode are cached for future reuse
+- freshness is tracked per company so the app can decide whether to reuse or refresh local data
 
 Current source policy:
 
@@ -16,14 +24,38 @@ Current source policy:
 - hybrid retrieval across lexical and vector signals
 - LLM-based routing, SQL generation, and final answer synthesis
 - evidence-backed answers over both numeric and text sources
+- on-demand company resolution, ingestion, and local caching
+- per-company freshness tracking for structured data, documents, and embeddings
+
+## Why This Is Interesting
+
+Most public-company LLM demos stop at one of these layers:
+
+- a chatbot over PDFs
+- a metrics dashboard with no document reasoning
+- a prompt wrapper over external finance APIs
+
+This repo deliberately combines all three hard parts:
+
+- structured financial modeling
+- unstructured filing retrieval
+- LLM orchestration that decides when to use SQL, retrieval, or both
+
+The result is a system that can answer questions like:
+
+- "Which company had the highest operating margin in the latest quarter?"
+- "What did Apple say about AI in its latest filings?"
+- "Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters."
 
 ## Current Scope
 
-The current local dataset covers:
+Preloaded local demo cache:
 
 - `MSFT`
 - `GOOGL`
 - `AMZN`
+
+Live mode can additionally resolve and ingest other US public companies on demand, then persist them locally for future cache hits.
 
 Current structured sources:
 
@@ -35,8 +67,7 @@ Current unstructured sources:
 
 - recent `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`, `40-F`, `DEF 14A`, and `S-1` / `S-3` / `S-4` filings
 
-Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), then loaded into Postgres for analysis and retrieval.
-Those raw SEC files stay local by default because [data/raw](./data/raw) is gitignored.
+Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), then loaded into Postgres for analysis and retrieval. Those raw SEC files stay local by default because [data/raw](./data/raw) is gitignored.
 
 ## App Modes
 
@@ -53,9 +84,12 @@ In live mode, the app may:
 
 1. extract the likely company / ticker from the question
 2. validate it against the SEC company reference list
-3. ingest or refresh that company locally
-4. run SQL, RAG, or hybrid analysis
-5. return a grounded answer with evidence and limitations
+3. check whether the company is already cached locally and still fresh
+4. ingest or refresh that company locally if needed
+5. run SQL, RAG, or hybrid analysis
+6. return a grounded answer with evidence and limitations
+
+The live path is designed for one-company-at-a-time analysis. Cold starts are slower, but the fetched company stays in the local store for future reuse.
 
 ## Architecture
 
@@ -76,6 +110,7 @@ Postgres + pgvector
   - derived_metrics
   - documents
   - document_chunks
+  - company_data_freshness
         |
         v
 LLM router -> SQL tool / retrieval tool / hybrid orchestration
@@ -93,6 +128,15 @@ Key modules:
 - [app](./app): FastAPI API and Streamlit demo UI
 - [evals](./evals): benchmark scaffolding for offline evaluation
 
+Important storage tables:
+
+- `filings`: SEC filing metadata per company
+- `facts`: normalized XBRL-style facts
+- `derived_metrics`: modeled period-level metrics used by the SQL layer
+- `documents`: parsed filing-level text documents
+- `document_chunks`: chunk-level retrieval units plus embeddings
+- `company_data_freshness`: last refresh timestamps for structured data, documents, and embeddings
+
 ## Current End-to-End Flow
 
 1. Load filings and company facts from the SEC for the active company set.
@@ -109,12 +153,18 @@ When `Use live analysis` is enabled, the request path is:
 
 1. planner extracts the likely company, ticker, route, and source needs
 2. resolver validates the company against the cached SEC company list
-3. the app checks whether local data for that company is fresh enough
+3. the app checks `company_data_freshness` to see whether local structured data, documents, and embeddings are still fresh
 4. if needed, it fetches official SEC data for that company and loads it into Postgres / `pgvector`
 5. SQL, retrieval, or hybrid analysis runs against the refreshed local store
 6. the LLM writes the final answer from the retrieved evidence
 
 This lets the app stay lightweight locally while still supporting on-demand analysis for companies that are not preloaded.
+
+Default freshness behavior:
+
+- SEC company reference cache: 24 hours
+- live company data cache: 24 hours
+- if cached company data is still fresh, live mode reuses it rather than re-ingesting the company
 
 ## Source Policy
 
@@ -132,6 +182,8 @@ Not used yet:
 - unofficial earnings-call transcript sites
 - finance blogs or media summaries
 - non-SEC investor-relations sources such as decks or press-release pages
+
+This is a deliberate product choice: the current version optimizes for reproducible, low-noise evidence rather than broad web coverage.
 
 ## Local Setup
 
@@ -212,6 +264,19 @@ The current pipeline writes:
 - structured metrics to Postgres, including non-USD annual / quarterly fact sets where available
 - filing chunks to `document_chunks`
 - embeddings to `document_chunks.embedding`
+- refresh timestamps to `company_data_freshness`
+
+## Persistence And Reuse
+
+When live mode fetches a new company:
+
+- the company is inserted into `companies`
+- structured data is written to `filings`, `facts`, and `derived_metrics`
+- filing text is written to `documents` and `document_chunks`
+- embeddings are stored in `document_chunks.embedding`
+- refresh times are stored in `company_data_freshness`
+
+That means a company fetched once in live mode becomes part of the local research store and can be reused on later questions without a full refetch if the cache is still fresh.
 
 ## How To Test
 
@@ -244,6 +309,19 @@ Invoke-RestMethod -Method Post `
 - company-aware retrieval when a question names multiple companies
 - quarter-aware SQL validation for quarter-based questions
 - broader SEC offline ingestion across domestic, foreign-issuer, event, proxy, and registration statement filings
+- on-demand ingestion plus local cache reuse for newly requested companies
+
+## Repo Walkthrough
+
+If someone is inspecting the repo quickly, the highest-signal places to look are:
+
+- [app/ui_streamlit.py](./app/ui_streamlit.py): user-facing flow, live toggle, source policy, evidence rendering
+- [agent/hybrid_tool.py](./agent/hybrid_tool.py): top-level cached vs live orchestration
+- [agent/sql_tool.py](./agent/sql_tool.py): LLM-assisted SQL generation with local execution
+- [agent/rag_tool.py](./agent/rag_tool.py): retrieval over stored filing chunks
+- [ingestion/live_ingest.py](./ingestion/live_ingest.py): on-demand company ingest and cache decisions
+- [ingestion/freshness.py](./ingestion/freshness.py): per-company freshness tracking
+- [db/schema.sql](./db/schema.sql): the normalized storage model
 
 ## Current Limitations
 
@@ -252,6 +330,7 @@ Invoke-RestMethod -Method Post `
 - retrieval quality is strong enough for demos, but still improvable
 - the Streamlit UI is an MVP, not a polished production frontend
 - evaluation exists as scaffolding and should be expanded into a fuller benchmark report
+- live mode is optimized for one-company analysis, not bulk market-wide ingestion
 
 ## Why This Repo Is Useful
 

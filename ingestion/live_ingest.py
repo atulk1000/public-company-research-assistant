@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
@@ -12,9 +10,14 @@ from agent.company_catalog import refresh_company_catalog
 from agent.company_resolver import ResolvedCompany
 from app.config import get_settings
 from ingestion.embed_chunks import embed_pending_chunks
+from ingestion.freshness import (
+    company_data_is_fresh,
+    get_company_freshness,
+    serialize_freshness,
+    upsert_company_freshness,
+)
 from ingestion.load_filing_texts import ingest_company_documents
 from ingestion.load_sec_data import CompanyRecord, ingest_company
-from ingestion.raw_storage import company_directory
 
 
 ProgressCallback = Callable[[str, str], None]
@@ -28,6 +31,7 @@ class LiveIngestResult:
     structured_counts: dict[str, int]
     document_counts: dict[str, int]
     embedding_counts: dict[str, int]
+    freshness: dict | None
 
 
 def get_connection():
@@ -56,47 +60,15 @@ def upsert_company(conn: psycopg.Connection, resolved: ResolvedCompany) -> Compa
     return CompanyRecord(**row)
 
 
-def latest_modified_time(path: Path) -> datetime | None:
-    if not path.exists():
-        return None
-
-    candidates = [path]
-    if path.is_dir():
-        candidates = [item for item in path.rglob("*") if item.is_file()]
-        if not candidates:
-            return None
-
-    modified = max(item.stat().st_mtime for item in candidates)
-    return datetime.fromtimestamp(modified, tz=timezone.utc)
-
-
 def cache_is_fresh(company: CompanyRecord, require_unstructured: bool) -> bool:
     settings = get_settings()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.live_cache_hours)
-    company_dir = company_directory(company.ticker)
-    submissions_mtime = latest_modified_time(company_dir / "submissions.json")
-    facts_mtime = latest_modified_time(company_dir / "companyfacts.json")
-
-    if submissions_mtime is None or facts_mtime is None or submissions_mtime < cutoff or facts_mtime < cutoff:
-        return False
-
     with get_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) AS count FROM derived_metrics WHERE company_id = %s;", (company.company_id,))
-            metric_count = cursor.fetchone()["count"]
-            if metric_count == 0:
-                return False
-
-            if require_unstructured:
-                cursor.execute("SELECT COUNT(*) AS count FROM documents WHERE company_id = %s;", (company.company_id,))
-                document_count = cursor.fetchone()["count"]
-                cursor.execute("SELECT COUNT(*) AS count FROM document_chunks WHERE company_id = %s AND embedding IS NOT NULL;", (company.company_id,))
-                embedded_chunk_count = cursor.fetchone()["count"]
-                filings_mtime = latest_modified_time(company_dir / "filings")
-                if document_count == 0 or embedded_chunk_count == 0 or filings_mtime is None or filings_mtime < cutoff:
-                    return False
-
-    return True
+        return company_data_is_fresh(
+            conn,
+            company.company_id,
+            max_age_hours=settings.live_cache_hours,
+            require_unstructured=require_unstructured,
+        )
 
 
 def run_live_ingestion(
@@ -113,6 +85,8 @@ def run_live_ingestion(
 
     report_progress(progress_callback, "cache", "Checking local cache freshness...")
     if cache_is_fresh(company, require_unstructured=require_unstructured):
+        with get_connection() as conn:
+            freshness = serialize_freshness(get_company_freshness(conn, company.company_id))
         refresh_company_catalog()
         return LiveIngestResult(
             ticker=company.ticker,
@@ -121,16 +95,19 @@ def run_live_ingestion(
             structured_counts={},
             document_counts={},
             embedding_counts={},
+            freshness=freshness,
         )
 
     report_progress(progress_callback, "structured", "Fetching and loading structured SEC data...")
     with get_connection() as conn:
         refreshed_company = upsert_company(conn, resolved)
         structured_counts = ingest_company(conn, refreshed_company)
+        freshness_row = upsert_company_freshness(conn, refreshed_company.company_id, structured_refreshed=True)
         conn.commit()
 
     document_counts = {"documents": 0, "chunks": 0}
     embedding_counts = {"updated_chunks": 0, "batches": 0}
+    latest_freshness = freshness_row
 
     if require_unstructured:
         report_progress(progress_callback, "documents", "Fetching filing documents and parsing text...")
@@ -141,11 +118,15 @@ def run_live_ingestion(
                 refreshed_company,
                 filing_limit=get_settings().max_document_filings_per_company,
             )
+            latest_freshness = upsert_company_freshness(conn, refreshed_company.company_id, documents_refreshed=True)
             conn.commit()
 
         report_progress(progress_callback, "embeddings", "Generating embeddings for filing chunks...")
         updated_chunks, batches = embed_pending_chunks(company_id=refreshed_company.company_id)
         embedding_counts = {"updated_chunks": updated_chunks, "batches": batches}
+        with get_connection() as conn:
+            latest_freshness = upsert_company_freshness(conn, refreshed_company.company_id, embeddings_refreshed=True)
+            conn.commit()
 
     refresh_company_catalog()
     return LiveIngestResult(
@@ -155,4 +136,5 @@ def run_live_ingestion(
         structured_counts=structured_counts,
         document_counts=document_counts,
         embedding_counts=embedding_counts,
+        freshness=serialize_freshness(latest_freshness),
     )
