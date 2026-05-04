@@ -1,0 +1,43 @@
+FROM pgvector/pgvector:pg17
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-venv \
+    python3-pip \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt ./
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
+COPY agent/ ./agent/
+COPY retrieval/ ./retrieval/
+COPY db/ ./db/
+COPY data/ ./data/
+COPY ingestion/ ./ingestion/
+COPY docker/demo/ ./docker/demo/
+
+RUN chmod +x /app/docker/demo/entrypoint.sh
+
+ENV PYTHONUNBUFFERED=1
+ENV POSTGRES_DB=company_assistant
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV DATABASE_URL=postgresql://postgres:postgres@localhost:5432/company_assistant
+ENV STREAMLIT_SERVER_PORT=8501
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ENV MAX_DOCUMENT_FILINGS_PER_COMPANY=12
+
+EXPOSE 5432 8000 8501
+
+ENTRYPOINT ["/app/docker/demo/entrypoint.sh"]

@@ -91,6 +91,49 @@ In live mode, the app may:
 
 The live path is designed for one-company-at-a-time analysis. Cold starts are slower, but the fetched company stays in the local store for future reuse.
 
+## Demo Image
+
+For an easier demo setup, the repo also includes a single-container demo image path:
+
+- embedded Postgres + `pgvector`
+- FastAPI API
+- Streamlit UI
+- bootstrap from checked-in raw SEC files under [data/raw/sec](./data/raw/sec)
+
+Build it:
+
+```powershell
+docker build -f Dockerfile.demo -t public-company-research-assistant-demo .
+```
+
+Run it:
+
+```powershell
+docker run --rm `
+  -p 5432:5432 `
+  -p 8000:8000 `
+  -p 8501:8501 `
+  -v public-company-research-assistant-demo-data:/var/lib/postgresql/data `
+  -e OPENAI_API_KEY=your_key_here `
+  -e SEC_USER_AGENT="Public Company Research Assistant your-email@example.com" `
+  public-company-research-assistant-demo
+```
+
+What this demo image does on first startup:
+
+1. starts Postgres locally inside the container
+2. applies the schema, seed data, and views
+3. bootstraps the database from the repo's raw SEC files
+4. generates embeddings if `OPENAI_API_KEY` is present
+5. starts the API and Streamlit UI
+
+Notes:
+
+- first startup is slower because it bootstraps the demo dataset
+- later restarts are faster if you reuse the mounted Docker volume shown above
+- `OPENAI_API_KEY` is required for the full LLM + embedding experience; without it, the container can still bootstrap the local SEC data store but semantic retrieval and LLM synthesis will be limited
+- this path is for demos only; the standard multi-container/manual flow remains the recommended development setup
+
 ## Architecture
 
 ```text
@@ -186,6 +229,11 @@ Not used yet:
 This is a deliberate product choice: the current version optimizes for reproducible, low-noise evidence rather than broad web coverage.
 
 ## Local Setup
+
+The repo supports two ways to run it:
+
+- **Demo path**: one container using [Dockerfile.demo](./Dockerfile.demo)
+- **Manual/dev path**: Postgres + API + Streamlit via [docker-compose.yml](./docker-compose.yml)
 
 ### 1. Create a virtual environment
 
