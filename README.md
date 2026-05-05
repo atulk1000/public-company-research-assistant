@@ -27,6 +27,23 @@ Current source policy:
 - on-demand company resolution, ingestion, and local caching
 - per-company freshness tracking for structured data, documents, and embeddings
 
+## Code Quality
+
+The repo includes explicit Python style/lint configuration in [pyproject.toml](./pyproject.toml) so the codebase is easy to review and maintain.
+
+Current standards:
+
+- `black` formatting
+- `ruff` linting
+- `isort` import ordering via Ruff
+
+Typical cleanup commands:
+
+```powershell
+python -m black .
+python -m ruff check . --fix
+```
+
 ## Why This Is Interesting
 
 Most public-company LLM demos stop at one of these layers:
@@ -169,7 +186,7 @@ Key modules:
 - [agent](./agent): company catalog, routing, SQL generation, retrieval, answer composition
 - [retrieval](./retrieval): lexical search and reranking helpers
 - [app](./app): FastAPI API and Streamlit demo UI
-- [evals](./evals): benchmark scaffolding for offline evaluation
+- [evals](./evals): benchmark cases and evaluator for routing, retrieval, citations, and live freshness behavior
 
 Important storage tables:
 
@@ -326,6 +343,49 @@ When live mode fetches a new company:
 
 That means a company fetched once in live mode becomes part of the local research store and can be reused on later questions without a full refetch if the cache is still fresh.
 
+## Evaluation
+
+The repo includes a benchmark-driven evaluation layer rather than route-only spot checks.
+
+Artifacts:
+
+- benchmark cases: [evals/benchmark_questions.yaml](./evals/benchmark_questions.yaml)
+- evaluator: [evals/run_eval.py](./evals/run_eval.py)
+- evaluation notes: [docs/evaluation.md](./docs/evaluation.md)
+
+The benchmark covers:
+
+- 25 benchmark cases today
+- cached and live analysis modes
+- SQL-only, RAG-only, and hybrid questions
+- single-company and multi-company prompts
+- positive cases and graceful-failure cases
+- preloaded companies plus live-ingested companies such as `AAPL`
+
+Tracked metrics:
+
+- routing accuracy
+- status accuracy
+- company resolution accuracy
+- SQL generation rate
+- SQL execution validity
+- retrieval hit rate
+- citation coverage
+- faithfulness proxy
+- freshness metadata rate for live mode
+
+Run the evaluator:
+
+```powershell
+python evals\run_eval.py
+```
+
+The runner writes a machine-readable report to:
+
+- `evals/latest_eval_report.json`
+
+This is still a pragmatic benchmark layer rather than a full research-grade evaluator, but it is designed to measure the product behaviors that matter for a hybrid SQL + RAG assistant.
+
 ## How To Test
 
 ### UI
@@ -370,6 +430,8 @@ If someone is inspecting the repo quickly, the highest-signal places to look are
 - [ingestion/live_ingest.py](./ingestion/live_ingest.py): on-demand company ingest and cache decisions
 - [ingestion/freshness.py](./ingestion/freshness.py): per-company freshness tracking
 - [db/schema.sql](./db/schema.sql): the normalized storage model
+- [evals/run_eval.py](./evals/run_eval.py): measurable checks for routing, retrieval, citations, and freshness
+- [docs/evaluation.md](./docs/evaluation.md): what the benchmark measures and what it still does not
 
 ## Current Limitations
 
@@ -377,7 +439,7 @@ If someone is inspecting the repo quickly, the highest-signal places to look are
 - non-SEC sources such as transcripts, investor decks, and IR-hosted earnings releases are not ingested yet
 - retrieval quality is strong enough for demos, but still improvable
 - the Streamlit UI is an MVP, not a polished production frontend
-- evaluation exists as scaffolding and should be expanded into a fuller benchmark report
+- evaluation is now benchmark-driven, but citation coverage and faithfulness are still heuristic rather than claim-by-claim verified
 - live mode is optimized for one-company analysis, not bulk market-wide ingestion
 
 ## Why This Repo Is Useful
@@ -393,5 +455,6 @@ This project is meant to show more than prompt engineering. It demonstrates an e
 
 - add more public data sources such as `8-K` exhibits, proxy statements, earnings call transcripts, and investor presentations
 - improve section-aware parsing for filings
-- expand benchmark questions and retrieval-quality evaluation
+- add screenshot/GIF walkthroughs for SQL-only, RAG, and hybrid flows
+- deepen evaluation with claim-level faithfulness checks and retrieval relevance labels
 - improve citation rendering and analyst-style presentation in the UI

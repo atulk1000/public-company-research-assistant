@@ -1,29 +1,325 @@
-- question: "Which company had the highest operating margin in the latest reported quarter?"
+- id: route_sql_latest_margin
+  question: "Which company had the highest operating margin in the latest reported quarter?"
   expected_route: "sql"
-  expected_company: ""
+  expected_companies: []
   expected_period: "latest quarter"
-  gold_notes: "Should rely on structured derived metrics."
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Pure structured comparison over the latest quarterly metrics."
 
-- question: "How has capex intensity changed for Microsoft over the last four quarters?"
+- id: route_sql_msft_capex
+  question: "How has capex intensity changed for Microsoft over the last four quarters?"
   expected_route: "sql"
-  expected_company: "MSFT"
+  expected_companies: ["MSFT"]
   expected_period: "last four quarters"
-  gold_notes: "Needs time-series metric view."
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Should use time-series SQL on v_company_period_metrics."
 
-- question: "What themes dominate Alphabet's latest management commentary around AI?"
+- id: route_sql_googl_growth
+  question: "Show Alphabet's latest quarterly revenue growth and operating margin."
+  expected_route: "sql"
+  expected_companies: ["GOOGL"]
+  expected_period: "latest quarter"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Structured single-company metric lookup."
+
+- id: route_sql_amzn_margin_trend
+  question: "Has Amazon's operating margin improved over the last four quarters?"
+  expected_route: "sql"
+  expected_companies: ["AMZN"]
+  expected_period: "last four quarters"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Structured trend analysis with an answer grounded in period rows."
+
+- id: route_rag_googl_ai_themes
+  question: "What themes dominate Alphabet's latest management commentary around AI?"
   expected_route: "rag"
-  expected_company: "GOOGL"
+  expected_companies: ["GOOGL"]
   expected_period: "latest"
-  gold_notes: "Should rely on retrieved management commentary."
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Should rely on filing text, not just metrics."
 
-- question: "Compare Microsoft and Amazon on cloud-related narrative and revenue trend."
-  expected_route: "hybrid"
-  expected_company: "MSFT,AMZN"
-  expected_period: ""
-  gold_notes: "Requires both narrative retrieval and numeric trend evidence."
+- id: route_rag_msft_openai
+  question: "What does Microsoft say about OpenAI and AI infrastructure in its latest filings?"
+  expected_route: "rag"
+  expected_companies: ["MSFT"]
+  expected_period: "latest"
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Narrative-only question over filing text."
 
-- question: "Which company had improving margins but cautious management tone?"
+- id: route_rag_amzn_strategy
+  question: "What strategic themes show up in Amazon's latest shareholder commentary?"
+  expected_route: "rag"
+  expected_companies: ["AMZN"]
+  expected_period: "latest"
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Narrative retrieval with company-specific commentary."
+
+- id: route_rag_proxy_governance
+  question: "What governance themes appear in Microsoft's latest proxy statement?"
+  expected_route: "rag"
+  expected_companies: ["MSFT"]
+  expected_period: "latest proxy"
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Should retrieve from DEF 14A / DEFA14A content."
+
+- id: route_hybrid_msft_amzn_cloud
+  question: "Compare Microsoft and Amazon on cloud-related narrative and revenue trend."
   expected_route: "hybrid"
-  expected_company: ""
-  expected_period: ""
-  gold_notes: "Needs both tone and structured margin evidence."
+  expected_companies: ["MSFT", "AMZN"]
+  expected_period: "recent"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Needs numeric trend evidence plus cloud narrative passages."
+
+- id: route_hybrid_msft_googl_ai_capex
+  question: "Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters."
+  expected_route: "hybrid"
+  expected_companies: ["MSFT", "GOOGL"]
+  expected_period: "last four quarters"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Canonical hybrid benchmark for numeric + narrative comparison."
+
+- id: route_hybrid_margin_tone
+  question: "Which company had improving margins but a cautious management tone?"
+  expected_route: "hybrid"
+  expected_companies: []
+  expected_period: "recent"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Requires margin trend plus a narrative/tone interpretation."
+
+- id: route_hybrid_rd_vs_ai
+  question: "Does Alphabet's AI commentary line up with its R&D intensity trend?"
+  expected_route: "hybrid"
+  expected_companies: ["GOOGL"]
+  expected_period: "recent"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Narrative-to-metric alignment benchmark."
+
+- id: live_sql_aapl_latest
+  question: "Which company had the highest operating margin in Apple's latest reported quarter?"
+  expected_route: "sql"
+  expected_companies: ["AAPL"]
+  expected_period: "latest quarter"
+  live_analysis: true
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Live-mode structured check for a company not in the original seeded trio."
+
+- id: live_rag_aapl_ai
+  question: "What did Apple say about AI in its latest filings?"
+  expected_route: "rag"
+  expected_companies: ["AAPL"]
+  expected_period: "latest"
+  live_analysis: true
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Live-mode retrieval benchmark over AAPL filing text."
+
+- id: live_hybrid_aapl_capex_ai
+  question: "Compare Apple's capital intensity with its AI commentary in the latest filings."
+  expected_route: "hybrid"
+  expected_companies: ["AAPL"]
+  expected_period: "recent"
+  live_analysis: true
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Single-company live hybrid question."
+
+- id: live_sql_nbis_last_quarter
+  question: "Do last quarter analysis for NBIS."
+  expected_route: "hybrid"
+  expected_companies: ["NBIS"]
+  expected_period: "last quarter"
+  live_analysis: true
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: false
+  require_citations: false
+  gold_notes: "Useful negative/coverage benchmark because NBIS currently highlights foreign-issuer source limitations."
+
+- id: live_not_found_invalid_ticker
+  question: "Do future analysis for ZZZZZ."
+  expected_route: "hybrid"
+  expected_companies: []
+  expected_period: "future"
+  live_analysis: true
+  requires_structured: false
+  requires_retrieval: false
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: false
+  require_citations: false
+  expected_status: "not_found"
+  gold_notes: "Resolver should fail gracefully for an invalid ticker."
+
+- id: route_sql_currency_awareness
+  question: "What currency does Microsoft's latest reported capex appear in?"
+  expected_route: "sql"
+  expected_companies: ["MSFT"]
+  expected_period: "latest quarter"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Structured metric inspection with explicit currency awareness."
+
+- id: route_rag_8k_event
+  question: "What does Amazon's latest 8-K emphasize?"
+  expected_route: "rag"
+  expected_companies: ["AMZN"]
+  expected_period: "latest 8-K"
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Should surface event-style filing content rather than metrics."
+
+- id: route_hybrid_proxy_and_metrics
+  question: "Do Microsoft's governance disclosures line up with its recent financial momentum?"
+  expected_route: "hybrid"
+  expected_companies: ["MSFT"]
+  expected_period: "recent"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Proxy + metrics cross-source benchmark."
+
+- id: route_sql_rd_intensity
+  question: "Which company had the highest R&D intensity in the latest reported quarter?"
+  expected_route: "sql"
+  expected_companies: []
+  expected_period: "latest quarter"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Structured ranking query over rd_pct_revenue."
+
+- id: route_rag_multi_company_ai_language
+  question: "How do Microsoft and Alphabet describe AI differently in their latest filings?"
+  expected_route: "rag"
+  expected_companies: ["MSFT", "GOOGL"]
+  expected_period: "latest"
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Retrieval-only comparison of filing language across two companies."
+
+- id: route_hybrid_capex_vs_commentary
+  question: "Is Microsoft's capex buildout reflected in the way management talks about AI infrastructure?"
+  expected_route: "hybrid"
+  expected_companies: ["MSFT"]
+  expected_period: "recent"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: true
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Another high-signal hybrid reasoning benchmark."
+
+- id: route_sql_revenue_trend_compare
+  question: "Compare Microsoft and Alphabet revenue growth trends over the last four quarters."
+  expected_route: "sql"
+  expected_companies: ["MSFT", "GOOGL"]
+  expected_period: "last four quarters"
+  live_analysis: false
+  requires_structured: true
+  requires_retrieval: false
+  require_nonempty_sql_rows: true
+  require_nonempty_retrieval: false
+  require_citations: true
+  gold_notes: "Multi-company structured trend benchmark."
+
+- id: route_rag_annual_risk_language
+  question: "What risk language stands out in Alphabet's latest annual filing?"
+  expected_route: "rag"
+  expected_companies: ["GOOGL"]
+  expected_period: "latest annual"
+  live_analysis: false
+  requires_structured: false
+  requires_retrieval: true
+  require_nonempty_sql_rows: false
+  require_nonempty_retrieval: true
+  require_citations: true
+  gold_notes: "Latest annual narrative benchmark."

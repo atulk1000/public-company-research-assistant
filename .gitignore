@@ -9,3 +9,4 @@ data/raw/
 data/processed/
 *.db
 *.sqlite3
+evals/latest_eval_report.json
