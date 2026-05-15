@@ -25,6 +25,8 @@ COPY retrieval/ ./retrieval/
 COPY db/ ./db/
 COPY data/ ./data/
 COPY ingestion/ ./ingestion/
+COPY evals/ ./evals/
+COPY docs/ ./docs/
 COPY docker/demo/ ./docker/demo/
 
 RUN chmod +x /app/docker/demo/entrypoint.sh

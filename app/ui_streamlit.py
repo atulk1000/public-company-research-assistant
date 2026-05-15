@@ -381,7 +381,15 @@ st.title("Public Company Research Assistant")
 st.caption("Hybrid SQL + RAG assistant for public-company narrative-vs-numbers analysis.")
 render_source_policy()
 
-default_question = "Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters."
+query_params = st.query_params
+demo_question = query_params.get("demo_question")
+demo_run_id = query_params.get("demo_run")
+demo_live = str(query_params.get("demo_live", "false")).lower() in {"1", "true", "yes"}
+
+default_question = (
+    demo_question
+    or "Compare Microsoft and Alphabet on AI narrative and capex intensity over the last four quarters."
+)
 question = st.text_area(
     "Ask a question about any US public company finances",
     value=default_question,
@@ -389,11 +397,16 @@ question = st.text_area(
 )
 live_analysis = st.toggle(
     "Use live analysis",
-    value=False,
+    value=demo_live,
     help="If off, answer only from companies that are already loaded locally.",
 )
 
 if st.button("Run Analysis", type="primary"):
+    clear_pending_clarification()
+    run_analysis(question, live_analysis=live_analysis)
+
+if demo_question and demo_run_id and st.session_state.get("last_demo_run_id") != demo_run_id:
+    st.session_state["last_demo_run_id"] = demo_run_id
     clear_pending_clarification()
     run_analysis(question, live_analysis=live_analysis)
 

@@ -155,7 +155,7 @@
   gold_notes: "Narrative-to-metric alignment benchmark."
 
 - id: live_sql_aapl_latest
-  question: "Which company had the highest operating margin in Apple's latest reported quarter?"
+  question: "Show Apple's operating margin in the latest reported quarter."
   expected_route: "sql"
   expected_companies: ["AAPL"]
   expected_period: "latest quarter"

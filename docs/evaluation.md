@@ -60,6 +60,10 @@ The runner prints an aggregate summary and writes a machine-readable report to:
 
 - [evals/latest_eval_report.json](../evals/latest_eval_report.json)
 
+The latest checked-in sample result summary is here:
+
+- [docs/eval_results.md](./eval_results.md)
+
 ## Current Limitations
 
 The evaluation layer is still heuristic in a few places:

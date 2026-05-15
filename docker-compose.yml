@@ -38,6 +38,8 @@ services:
       - ./db:/app/db
       - ./data:/app/data
       - ./ingestion:/app/ingestion
+      - ./evals:/app/evals
+      - ./docs:/app/docs
     command: uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
 
   streamlit:
@@ -61,6 +63,8 @@ services:
       - ./db:/app/db
       - ./data:/app/data
       - ./ingestion:/app/ingestion
+      - ./evals:/app/evals
+      - ./docs:/app/docs
     command: streamlit run app/ui_streamlit.py --server.port=8501 --server.address=0.0.0.0
 
 volumes:

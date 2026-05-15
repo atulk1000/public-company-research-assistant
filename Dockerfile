@@ -38,6 +38,8 @@ COPY retrieval/ ./retrieval/
 COPY db/ ./db/
 COPY data/ ./data/
 COPY ingestion/ ./ingestion/
+COPY evals/ ./evals/
+COPY docs/ ./docs/
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1

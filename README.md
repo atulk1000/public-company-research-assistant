@@ -110,6 +110,27 @@ In live mode, the app may:
 
 The live path is designed for one-company-at-a-time analysis. Cold starts are slower, but the fetched company stays in the local store for future reuse.
 
+## Product Screenshots
+
+SQL-only question answered from structured SEC/XBRL-derived metrics:
+
+![SQL-only query result](docs/screenshots/sql_only.png)
+
+RAG question answered from embedded SEC filing text with document citations:
+
+![RAG answer with SEC citations](docs/screenshots/rag_citations.png)
+
+Hybrid question combining financial metrics with filing commentary:
+
+![Hybrid SQL and RAG answer](docs/screenshots/hybrid_analysis.png)
+
+Regenerate the screenshots from a running Streamlit app:
+
+```powershell
+$env:STREAMLIT_URL="http://localhost:8501"
+node scripts\capture_demo_screenshots.mjs
+```
+
 ## Demo Image
 
 For an easier demo setup, the repo also includes a single-container demo image path:
@@ -354,6 +375,7 @@ Artifacts:
 - benchmark cases: [evals/benchmark_questions.yaml](./evals/benchmark_questions.yaml)
 - evaluator: [evals/run_eval.py](./evals/run_eval.py)
 - evaluation notes: [docs/evaluation.md](./docs/evaluation.md)
+- latest sample results: [docs/eval_results.md](./docs/eval_results.md)
 
 The benchmark covers:
 
@@ -387,6 +409,15 @@ The runner writes a machine-readable report to:
 - `evals/latest_eval_report.json`
 
 This is still a pragmatic benchmark layer rather than a full research-grade evaluator, but it is designed to measure the product behaviors that matter for a hybrid SQL + RAG assistant.
+
+Latest sample run:
+
+- 25 benchmark cases
+- 96.00% pass rate
+- 95.83% routing accuracy
+- 100.00% retrieval hit rate
+- 100.00% citation coverage
+- 100.00% freshness metadata rate
 
 ## How To Test
 
@@ -457,6 +488,5 @@ This project is meant to show more than prompt engineering. It demonstrates an e
 
 - add more public data sources such as `8-K` exhibits, proxy statements, earnings call transcripts, and investor presentations
 - improve section-aware parsing for filings
-- add screenshot/GIF walkthroughs for SQL-only, RAG, and hybrid flows
 - deepen evaluation with claim-level faithfulness checks and retrieval relevance labels
 - improve citation rendering and analyst-style presentation in the UI
