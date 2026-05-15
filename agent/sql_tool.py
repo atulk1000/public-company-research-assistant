@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from decimal import Decimal
-from pathlib import Path
 import os
 import re
 import sys
-from typing import Literal
+from datetime import date, datetime
+from decimal import Decimal
+from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 
-from agent.company_catalog import alias_to_ticker_map, available_tickers, company_context_lines, normalize_alias
+from agent.company_catalog import (
+    alias_to_ticker_map,
+    available_tickers,
+    company_context_lines,
+    normalize_alias,
+)
 from agent.openai_client import get_openai_client
 from app.config import get_settings
 from app.prompts import SQL_SYSTEM_PROMPT, SQL_USER_TEMPLATE
@@ -53,6 +57,7 @@ QUARTER_FILTER_PATTERNS = (
     "fiscal_quarter <> 'fy'",
     "fiscal_quarter != 'fy'",
 )
+
 
 class SQLPlan(BaseModel):
     sql: str
@@ -112,7 +117,7 @@ def extract_cte_names(sql: str) -> set[str]:
 
     remaining = remaining[4:].strip()
     while remaining:
-        match = re.match(r'([a-zA-Z_][\w]*)\s+as\s*\(', remaining, flags=re.IGNORECASE)
+        match = re.match(r"([a-zA-Z_][\w]*)\s+as\s*\(", remaining, flags=re.IGNORECASE)
         if not match:
             break
 
@@ -166,7 +171,9 @@ def validate_sql(sql: str) -> str:
     disallowed = referenced_relations - ALLOWED_RELATIONS
     if disallowed:
         allowed = ", ".join(sorted(ALLOWED_RELATIONS))
-        raise SQLValidationError(f"SQL referenced unsupported relations: {', '.join(sorted(disallowed))}. Allowed: {allowed}.")
+        raise SQLValidationError(
+            f"SQL referenced unsupported relations: {', '.join(sorted(disallowed))}. Allowed: {allowed}."
+        )
 
     return cleaned
 
@@ -175,7 +182,9 @@ def enforce_question_constraints(sql: str, question: str) -> str:
     normalized_question = question.lower()
     normalized_sql = sql.lower()
 
-    if "quarter" in normalized_question and not any(pattern in normalized_sql for pattern in QUARTER_FILTER_PATTERNS):
+    if "quarter" in normalized_question and not any(
+        pattern in normalized_sql for pattern in QUARTER_FILTER_PATTERNS
+    ):
         raise SQLValidationError(
             "Quarter-based questions must restrict results to quarterly rows where fiscal_quarter LIKE 'Q%'."
         )
@@ -183,7 +192,9 @@ def enforce_question_constraints(sql: str, question: str) -> str:
     return sql
 
 
-def generate_sql_fallback(question: str, error: Exception | None = None, requested_tickers: list[str] | None = None) -> dict:
+def generate_sql_fallback(
+    question: str, error: Exception | None = None, requested_tickers: list[str] | None = None
+) -> dict:
     normalized = question.lower()
     requested_tickers = requested_tickers or extract_requested_tickers(question)
     quarterly_filter = "fiscal_quarter LIKE 'Q%'"
@@ -273,7 +284,9 @@ def generate_sql(question: str, requested_tickers: list[str] | None = None) -> d
                 question=question,
                 tickers=", ".join(available_tickers()) or "none loaded yet",
                 companies="\n".join(company_context_lines()) or "- none loaded yet",
-                focus_tickers=", ".join(requested_tickers) if requested_tickers else "none specified",
+                focus_tickers=(
+                    ", ".join(requested_tickers) if requested_tickers else "none specified"
+                ),
             ),
             text_format=SQLPlan,
         )

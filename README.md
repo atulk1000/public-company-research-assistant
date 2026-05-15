@@ -1,5 +1,7 @@
 # Public Company Research Assistant
 
+[![CI](https://github.com/atulk1000/public-company-research-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/atulk1000/public-company-research-assistant/actions/workflows/ci.yml)
+
 A hybrid SQL + RAG research assistant for US public companies. It ingests structured SEC/XBRL metrics and unstructured SEC filing text, routes questions across SQL, retrieval, or both, and uses an LLM to produce grounded answers with citations and limitations.
 
 This is intentionally built as a real data system rather than a thin chatbot wrapper:

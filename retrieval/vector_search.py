@@ -17,7 +17,9 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     return _dot(left, right) / (_norm(left) * _norm(right))
 
 
-def vector_search(query_embedding: list[float], documents: list[dict], top_k: int = 3) -> list[SearchResult]:
+def vector_search(
+    query_embedding: list[float], documents: list[dict], top_k: int = 3
+) -> list[SearchResult]:
     results: list[SearchResult] = []
     for document in documents:
         score = cosine_similarity(query_embedding, document["embedding"])

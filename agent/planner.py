@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal
 import re
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,7 +20,9 @@ class QuestionPlan(BaseModel):
     reasoning: str
 
 
-def planner_fallback(question: str, clarification: str | None = None, error: Exception | None = None) -> QuestionPlan:
+def planner_fallback(
+    question: str, clarification: str | None = None, error: Exception | None = None
+) -> QuestionPlan:
     route_decision = classify_question_fallback(question, error=error)
     combined_text = " ".join(part for part in [question, clarification or ""] if part).strip()
     ticker_match = re.search(r"\b[A-Z]{1,5}\b", combined_text)
@@ -63,7 +65,11 @@ def plan_question(question: str, clarification: str | None = None) -> QuestionPl
         )
         plan = response.output_parsed
         if not plan.required_sources:
-            plan.required_sources = ["structured"] if plan.route == "sql" else ["unstructured"] if plan.route == "rag" else ["structured", "unstructured"]
+            plan.required_sources = (
+                ["structured"]
+                if plan.route == "sql"
+                else ["unstructured"] if plan.route == "rag" else ["structured", "unstructured"]
+            )
         return plan
     except Exception as exc:
         return planner_fallback(question, clarification=clarification, error=exc)

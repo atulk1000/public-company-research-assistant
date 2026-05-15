@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import psycopg
 
@@ -17,8 +17,8 @@ from ingestion.fetch_sec_filings import extract_recent_filings
 from ingestion.freshness import upsert_company_freshness, utc_now
 from ingestion.load_filing_texts import html_to_text, insert_chunks, insert_document
 from ingestion.load_sec_data import (
-    CompanyRecord,
     TARGET_CONCEPTS,
+    CompanyRecord,
     build_metric_rows,
     clear_company_data,
     dedupe_facts,
@@ -41,7 +41,9 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def company_from_raw(conn: psycopg.Connection, ticker: str, submissions: dict, company_facts: dict) -> CompanyRecord:
+def company_from_raw(
+    conn: psycopg.Connection, ticker: str, submissions: dict, company_facts: dict
+) -> CompanyRecord:
     cik_value = company_facts.get("cik") or submissions.get("cik")
     name = company_facts.get("entityName") or submissions.get("name") or ticker
     if cik_value is None:
@@ -86,7 +88,9 @@ def filing_rows_by_accession(conn: psycopg.Connection, company_id: int, limit: i
         return cursor.fetchall()
 
 
-def ingest_local_documents(conn: psycopg.Connection, company: CompanyRecord, filing_limit: int) -> dict[str, int]:
+def ingest_local_documents(
+    conn: psycopg.Connection, company: CompanyRecord, filing_limit: int
+) -> dict[str, int]:
     filing_rows = filing_rows_by_accession(conn, company.company_id, filing_limit)
     filings_by_accession = {row["accession_no"]: row for row in filing_rows}
 
@@ -123,7 +127,9 @@ def ingest_local_documents(conn: psycopg.Connection, company: CompanyRecord, fil
     return {"documents": document_count, "chunks": chunk_count}
 
 
-def bootstrap_company(conn: psycopg.Connection, ticker: str, filing_limit: int, refresh_time) -> dict[str, int]:
+def bootstrap_company(
+    conn: psycopg.Connection, ticker: str, filing_limit: int, refresh_time
+) -> dict[str, int]:
     company_root = RAW_SEC_ROOT / ticker
     submissions_file = company_root / "submissions.json"
     company_facts_file = company_root / "companyfacts.json"
@@ -142,10 +148,14 @@ def bootstrap_company(conn: psycopg.Connection, ticker: str, filing_limit: int, 
     replace_facts(conn, company, filing_ids, fact_rows)
     metric_rows = build_metric_rows(company, fact_rows)
     replace_derived_metrics(conn, company, metric_rows)
-    upsert_company_freshness(conn, company.company_id, structured_refreshed=True, refreshed_at=refresh_time)
+    upsert_company_freshness(
+        conn, company.company_id, structured_refreshed=True, refreshed_at=refresh_time
+    )
 
     document_counts = ingest_local_documents(conn, company, filing_limit)
-    upsert_company_freshness(conn, company.company_id, documents_refreshed=True, refreshed_at=refresh_time)
+    upsert_company_freshness(
+        conn, company.company_id, documents_refreshed=True, refreshed_at=refresh_time
+    )
 
     return {
         "company_id": company.company_id,
@@ -187,11 +197,15 @@ def main() -> None:
         updated_chunks, batches = embed_pending_chunks()
         with get_connection() as conn:
             for company_id in company_ids:
-                upsert_company_freshness(conn, company_id, embeddings_refreshed=True, refreshed_at=refresh_time)
+                upsert_company_freshness(
+                    conn, company_id, embeddings_refreshed=True, refreshed_at=refresh_time
+                )
             conn.commit()
         print(f"Generated embeddings for {updated_chunks} chunks across {batches} batch(es).")
     else:
-        print("OPENAI_API_KEY not set. Skipping embedding bootstrap; SQL-only demo paths will still work.")
+        print(
+            "OPENAI_API_KEY not set. Skipping embedding bootstrap; SQL-only demo paths will still work."
+        )
 
     print("Local raw bootstrap complete.")
     for ticker, counts in results.items():

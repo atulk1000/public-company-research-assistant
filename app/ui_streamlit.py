@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from pathlib import Path
 import re
 import sys
+from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -74,10 +74,20 @@ def rows_to_dataframe(rows: list[dict]) -> pd.DataFrame:
     frame = frame.rename(columns=rename_map)
 
     for column in frame.columns:
-        if column in {"Revenue Growth YoY", "Operating Margin", "Capex % Revenue", "R&D % Revenue", "Gross Margin"}:
-            frame[column] = frame[column].apply(lambda value: None if pd.isna(value) else f"{value:.2%}")
+        if column in {
+            "Revenue Growth YoY",
+            "Operating Margin",
+            "Capex % Revenue",
+            "R&D % Revenue",
+            "Gross Margin",
+        }:
+            frame[column] = frame[column].apply(
+                lambda value: None if pd.isna(value) else f"{value:.2%}"
+            )
         elif column == "Capex":
-            frame[column] = frame[column].apply(lambda value: None if pd.isna(value) else f"{value:,.0f}")
+            frame[column] = frame[column].apply(
+                lambda value: None if pd.isna(value) else f"{value:,.0f}"
+            )
 
     return frame
 
@@ -108,7 +118,9 @@ def make_progress_reporter():
     return reporter, status_placeholder, progress_bar
 
 
-def run_analysis(question: str, live_analysis: bool, clarification_response: str | None = None) -> None:
+def run_analysis(
+    question: str, live_analysis: bool, clarification_response: str | None = None
+) -> None:
     reporter = None
     status_placeholder = None
     progress_bar = None
@@ -161,7 +173,9 @@ def render_route_section(result: dict) -> None:
     metric_cols = st.columns(4)
     metric_cols[0].metric("Mode", mode.upper())
     metric_cols[1].metric("Route", route.upper())
-    metric_cols[2].metric("Planner Company", planning.get("ticker") or planning.get("company_name") or "n/a")
+    metric_cols[2].metric(
+        "Planner Company", planning.get("ticker") or planning.get("company_name") or "n/a"
+    )
     metric_cols[3].metric("Resolved Company", resolved_company.get("ticker") or "n/a")
 
     if mode == "live" and result.get("status") == "success":
@@ -230,12 +244,20 @@ def render_structured_evidence(structured_evidence: dict | None) -> None:
                 for row in ticker_rows:
                     period = row.get("period_end", "unknown period")
                     summary_parts = []
-                    for key in ("operating_margin", "capex_pct_revenue", "revenue_growth_yoy", "rd_pct_revenue", "capex"):
+                    for key in (
+                        "operating_margin",
+                        "capex_pct_revenue",
+                        "revenue_growth_yoy",
+                        "rd_pct_revenue",
+                        "capex",
+                    ):
                         value = row.get(key)
                         if value is not None:
                             label = key.replace("_", " ")
                             summary_parts.append(f"{label}: {format_metric_value(value)}")
-                    st.write(f"{period}: " + ", ".join(summary_parts) if summary_parts else str(row))
+                    st.write(
+                        f"{period}: " + ", ".join(summary_parts) if summary_parts else str(row)
+                    )
     else:
         st.info("The SQL tool ran, but it returned no rows.")
 
@@ -256,12 +278,24 @@ def render_retrieved_evidence(retrieved_evidence: list[dict] | None) -> None:
     with ticker_col:
         st.metric(
             "Companies Represented",
-            len({item.get("metadata", {}).get("ticker") for item in retrieved_evidence if item.get("metadata", {}).get("ticker")}),
+            len(
+                {
+                    item.get("metadata", {}).get("ticker")
+                    for item in retrieved_evidence
+                    if item.get("metadata", {}).get("ticker")
+                }
+            ),
         )
     with source_col:
         st.metric(
             "Doc Types",
-            len({item.get("metadata", {}).get("doc_type") for item in retrieved_evidence if item.get("metadata", {}).get("doc_type")}),
+            len(
+                {
+                    item.get("metadata", {}).get("doc_type")
+                    for item in retrieved_evidence
+                    if item.get("metadata", {}).get("doc_type")
+                }
+            ),
         )
 
     grouped: dict[str, list[dict]] = defaultdict(list)
@@ -295,9 +329,13 @@ def render_live_ingestion(result: dict) -> None:
     st.subheader("Live Ingestion")
     count_cols = st.columns(4)
     count_cols[0].metric("Cache", "Hit" if live_ingestion.get("used_cache") else "Refresh")
-    count_cols[1].metric("Structured Rows", live_ingestion.get("structured_counts", {}).get("metric_rows", 0))
+    count_cols[1].metric(
+        "Structured Rows", live_ingestion.get("structured_counts", {}).get("metric_rows", 0)
+    )
     count_cols[2].metric("Documents", live_ingestion.get("document_counts", {}).get("documents", 0))
-    count_cols[3].metric("Embedded Chunks", live_ingestion.get("embedding_counts", {}).get("updated_chunks", 0))
+    count_cols[3].metric(
+        "Embedded Chunks", live_ingestion.get("embedding_counts", {}).get("updated_chunks", 0)
+    )
 
     freshness = live_ingestion.get("freshness") or {}
     if freshness:
@@ -319,7 +357,9 @@ def render_clarification_panel() -> None:
         return
 
     st.subheader("Clarification Needed")
-    st.info(clean_display_text(st.session_state.get("pending_message") or "Please clarify the company."))
+    st.info(
+        clean_display_text(st.session_state.get("pending_message") or "Please clarify the company.")
+    )
     candidates = st.session_state.get("pending_candidates") or []
     options = [f"{candidate['ticker']} - {candidate['name']}" for candidate in candidates]
     selected = st.selectbox("Possible matches", options=options) if options else ""
@@ -365,7 +405,9 @@ if result:
     render_route_section(result)
     render_answer_section(result)
 
-    evidence_tab, documents_tab, live_tab, debug_tab = st.tabs(["Metrics", "Documents", "Live", "Debug"])
+    evidence_tab, documents_tab, live_tab, debug_tab = st.tabs(
+        ["Metrics", "Documents", "Live", "Debug"]
+    )
     with evidence_tab:
         render_structured_evidence(result.get("structured_evidence"))
     with documents_tab:

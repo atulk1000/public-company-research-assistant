@@ -19,7 +19,9 @@ class Settings(BaseSettings):
 
     @property
     def ticker_list(self) -> list[str]:
-        return [ticker.strip().upper() for ticker in self.target_tickers.split(",") if ticker.strip()]
+        return [
+            ticker.strip().upper() for ticker in self.target_tickers.split(",") if ticker.strip()
+        ]
 
 
 @lru_cache(maxsize=1)

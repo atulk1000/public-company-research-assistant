@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
-import json
 from pathlib import Path
-import re
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_SEC_ROOT = PROJECT_ROOT / "data" / "raw" / "sec"
+
+COMMON_ALIASES_BY_TICKER = {
+    "AAPL": ("apple",),
+    "AMZN": ("amazon",),
+    "GOOGL": ("alphabet", "google"),
+    "MSFT": ("microsoft",),
+    "NBIS": ("nebius",),
+}
 
 
 @dataclass(frozen=True)
@@ -56,6 +63,11 @@ def alias_variants(name: str) -> set[str]:
                     if trimmed and trimmed not in variants:
                         variants.add(trimmed)
                         changed = True
+            if value.endswith(" com"):
+                trimmed = value[: -len(" com")].strip()
+                if trimmed and trimmed not in variants:
+                    variants.add(trimmed)
+                    changed = True
     return {variant for variant in variants if variant}
 
 
@@ -84,6 +96,8 @@ def get_company_catalog() -> list[CompanyCatalogEntry]:
         aliases = set()
         for ticker in tickers:
             aliases.add(normalize_alias(ticker))
+            for common_alias in COMMON_ALIASES_BY_TICKER.get(ticker.upper(), ()):
+                aliases.add(normalize_alias(common_alias))
         for variant in alias_variants(company_name):
             aliases.add(variant)
         entries.append(
@@ -105,10 +119,7 @@ def available_tickers() -> list[str]:
 
 
 def company_context_lines() -> list[str]:
-    return [
-        f"- {entry.ticker}: {entry.name}"
-        for entry in get_company_catalog()
-    ]
+    return [f"- {entry.ticker}: {entry.name}" for entry in get_company_catalog()]
 
 
 def company_name_for_ticker(ticker: str) -> str | None:

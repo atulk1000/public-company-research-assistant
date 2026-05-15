@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import html
-from html.parser import HTMLParser
 import os
-from pathlib import Path
 import re
 import sys
 import time
 import unicodedata
+from html.parser import HTMLParser
+from pathlib import Path
 
 import httpx
 
@@ -16,10 +16,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ingestion.chunk_documents import chunk_text
-from ingestion.load_sec_data import CompanyRecord, get_connection, load_settings, load_target_companies
+from ingestion.load_sec_data import (
+    CompanyRecord,
+    get_connection,
+    load_settings,
+    load_target_companies,
+)
 from ingestion.raw_storage import filing_html_path, save_text
 from ingestion.sec_api import sec_headers
-
 
 REQUEST_PAUSE_SECONDS = 0.25
 DEFAULT_MAX_FILINGS_PER_COMPANY = 12
@@ -262,7 +266,9 @@ def main() -> None:
     with get_connection() as conn:
         companies = load_target_companies(conn, settings.ticker_list)
         if not companies:
-            raise RuntimeError("No target companies found. Apply db/seed.sql before running filing text ingestion.")
+            raise RuntimeError(
+                "No target companies found. Apply db/seed.sql before running filing text ingestion."
+            )
 
         print(f"Loading filing text for up to {filing_limit} recent filings per company...")
         for company in companies:

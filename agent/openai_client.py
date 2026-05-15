@@ -19,4 +19,3 @@ def get_openai_client() -> OpenAI:
             "OPENAI_API_KEY is not configured. Set it in your environment or .env before running LLM-backed analysis."
         )
     return OpenAI(api_key=settings.openai_api_key)
-

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def format_percent(value: float | None) -> str:
     if value is None:
         return "n/a"
@@ -59,7 +60,11 @@ def compose_sql_answer(question: str, structured_evidence: dict) -> str:
         recent_rows = rows[:4]
         latest = recent_rows[0]
         oldest = recent_rows[-1]
-        trajectory = "increased" if (latest.get("capex_pct_revenue") or 0) > (oldest.get("capex_pct_revenue") or 0) else "decreased"
+        trajectory = (
+            "increased"
+            if (latest.get("capex_pct_revenue") or 0) > (oldest.get("capex_pct_revenue") or 0)
+            else "decreased"
+        )
         series = ", ".join(
             f"{row.get('period_end')}: {format_percent(row.get('capex_pct_revenue'))}"
             for row in recent_rows
@@ -88,13 +93,20 @@ def compose_rag_answer(retrieved_evidence: list[dict]) -> str:
     )
 
 
-def compose_hybrid_answer(question: str, structured_evidence: dict | None, retrieved_evidence: list[dict] | None) -> str:
+def compose_hybrid_answer(
+    question: str, structured_evidence: dict | None, retrieved_evidence: list[dict] | None
+) -> str:
     sql_summary = compose_sql_answer(question, structured_evidence or {"rows": []})
     rag_summary = compose_rag_answer(retrieved_evidence or [])
     return f"{sql_summary}\n\nDocument evidence: {rag_summary}"
 
 
-def compose_answer(question: str, route: str, structured_evidence: dict | None, retrieved_evidence: list[dict] | None) -> str:
+def compose_answer(
+    question: str,
+    route: str,
+    structured_evidence: dict | None,
+    retrieved_evidence: list[dict] | None,
+) -> str:
     if route == "sql" and structured_evidence:
         return compose_sql_answer(question, structured_evidence)
     if route == "rag" and retrieved_evidence is not None:

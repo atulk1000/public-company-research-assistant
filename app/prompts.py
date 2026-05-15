@@ -73,6 +73,7 @@ Rules:
 - Use only the view v_company_period_metrics.
 - Do not modify data.
 - Do not query any table other than v_company_period_metrics.
+- Always include ticker and period_end in the SELECT output so downstream citations can identify the source rows.
 - If the user asks about a quarter, quarters, or the latest reported quarter, exclude fiscal_year summary rows and keep only quarterly rows where fiscal_quarter LIKE 'Q%'.
 - Return the minimal columns needed to answer the question.
 - Order results so the most relevant rows appear first.
@@ -111,7 +112,8 @@ You are a public company research assistant.
 Answer only from the supplied evidence.
 Separate facts from inference.
 If the evidence is incomplete or mixed, say so clearly.
-Use inline citations from the provided citation labels.
+Use inline citations from the provided citation labels, preserving labels exactly such as [SQL:MSFT:2025-09-30] or [DOC:MSFT:10-K:2025-07-30:1].
+Every major factual claim should have at least one citation.
 Do not invent evidence that is not in the context.
 """.strip()
 

@@ -106,7 +106,9 @@ def company_data_is_fresh(
         return False
 
     with conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute("SELECT COUNT(*) AS count FROM derived_metrics WHERE company_id = %s;", (company_id,))
+        cursor.execute(
+            "SELECT COUNT(*) AS count FROM derived_metrics WHERE company_id = %s;", (company_id,)
+        )
         metric_count = cursor.fetchone()["count"]
         if metric_count == 0:
             return False
@@ -119,7 +121,9 @@ def company_data_is_fresh(
             if documents_refreshed_at < cutoff or embeddings_refreshed_at < cutoff:
                 return False
 
-            cursor.execute("SELECT COUNT(*) AS count FROM documents WHERE company_id = %s;", (company_id,))
+            cursor.execute(
+                "SELECT COUNT(*) AS count FROM documents WHERE company_id = %s;", (company_id,)
+            )
             document_count = cursor.fetchone()["count"]
             cursor.execute(
                 "SELECT COUNT(*) AS count FROM document_chunks WHERE company_id = %s AND embedding IS NOT NULL;",
@@ -144,5 +148,7 @@ def serialize_freshness(freshness: dict | None) -> dict | None:
         "updated_at",
     ):
         value = freshness.get(key)
-        serialized[key] = value.isoformat() if hasattr(value, "isoformat") and value is not None else value
+        serialized[key] = (
+            value.isoformat() if hasattr(value, "isoformat") and value is not None else value
+        )
     return serialized

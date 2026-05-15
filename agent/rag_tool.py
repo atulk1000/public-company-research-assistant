@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import os
 import re
 import sys
+from pathlib import Path
 
 import psycopg
 from pgvector.psycopg import register_vector
@@ -18,11 +18,19 @@ from ingestion.embed_chunks import embed_texts
 from retrieval.lexical_search import SearchResult, lexical_search
 from retrieval.rerank import rerank_results
 
-
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/company_assistant"
 LEXICAL_CANDIDATE_LIMIT = 250
 VECTOR_CANDIDATE_LIMIT = 12
-NARRATIVE_TERMS = ("narrative", "commentary", "management", "ai", "artificial intelligence", "copilot", "openai", "gemini")
+NARRATIVE_TERMS = (
+    "narrative",
+    "commentary",
+    "management",
+    "ai",
+    "artificial intelligence",
+    "copilot",
+    "openai",
+    "gemini",
+)
 HIGH_SIGNAL_TERMS = (
     "artificial intelligence",
     " ai ",
@@ -132,7 +140,9 @@ def adjust_result_scores(results: list[SearchResult], question: str) -> list[Sea
     return sorted(results, key=lambda item: item.score, reverse=True)
 
 
-def load_lexical_candidates(requested_tickers: list[str] | None = None, limit: int = LEXICAL_CANDIDATE_LIMIT) -> list[dict]:
+def load_lexical_candidates(
+    requested_tickers: list[str] | None = None, limit: int = LEXICAL_CANDIDATE_LIMIT
+) -> list[dict]:
     requested_tickers = requested_tickers or []
     with get_connection() as conn:
         with conn.cursor() as cursor:
@@ -193,7 +203,11 @@ def load_lexical_candidates(requested_tickers: list[str] | None = None, limit: i
     ]
 
 
-def vector_search_db(query_embedding: list[float], requested_tickers: list[str] | None = None, limit: int = VECTOR_CANDIDATE_LIMIT) -> list[SearchResult]:
+def vector_search_db(
+    query_embedding: list[float],
+    requested_tickers: list[str] | None = None,
+    limit: int = VECTOR_CANDIDATE_LIMIT,
+) -> list[SearchResult]:
     requested_tickers = requested_tickers or []
     with get_connection() as conn:
         with conn.cursor() as cursor:
@@ -266,7 +280,9 @@ def search_scope(question: str, scope_tickers: list[str]) -> list[SearchResult]:
 
     try:
         query_embedding = embed_texts([search_query])[0]
-        vector_results = vector_search_db(query_embedding, scope_tickers, limit=VECTOR_CANDIDATE_LIMIT)
+        vector_results = vector_search_db(
+            query_embedding, scope_tickers, limit=VECTOR_CANDIDATE_LIMIT
+        )
     except Exception:
         vector_results = []
 
@@ -283,7 +299,9 @@ def search_scope(question: str, scope_tickers: list[str]) -> list[SearchResult]:
     return [result for result in reranked if not is_low_signal_chunk(result.text)]
 
 
-def diversify_results(results: list[SearchResult], requested_tickers: list[str], top_k: int) -> list[SearchResult]:
+def diversify_results(
+    results: list[SearchResult], requested_tickers: list[str], top_k: int
+) -> list[SearchResult]:
     if not requested_tickers:
         return results[:top_k]
 
@@ -310,12 +328,16 @@ def diversify_results(results: list[SearchResult], requested_tickers: list[str],
     return selected[:top_k]
 
 
-def retrieve_evidence(question: str, top_k: int = 6, requested_tickers: list[str] | None = None) -> list[dict]:
+def retrieve_evidence(
+    question: str, top_k: int = 6, requested_tickers: list[str] | None = None
+) -> list[dict]:
     requested_tickers = requested_tickers or extract_requested_tickers(question)
     if requested_tickers:
         combined_results: list[SearchResult] = []
         for ticker in requested_tickers:
-            combined_results.extend(search_scope(question, [ticker])[: max(2, top_k // len(requested_tickers))])
+            combined_results.extend(
+                search_scope(question, [ticker])[: max(2, top_k // len(requested_tickers))]
+            )
 
         if len(combined_results) < top_k:
             combined_results.extend(search_scope(question, requested_tickers))

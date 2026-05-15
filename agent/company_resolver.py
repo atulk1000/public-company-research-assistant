@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-import json
 from pathlib import Path
 from typing import Literal
 
@@ -12,9 +12,10 @@ from agent.company_catalog import alias_variants, normalize_alias
 from app.config import get_settings
 from ingestion.fetch_sec_companies import fetch_company_index, normalize_company_index
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_PATH = PROJECT_ROOT / "data" / "reference" / "sec" / "company_tickers.json"
+
+
 class CompanyCandidate(BaseModel):
     ticker: str
     name: str
@@ -82,18 +83,29 @@ def candidate_aliases(record: dict) -> set[str]:
     return aliases
 
 
-def resolve_candidates(company_name: str | None, ticker: str | None, clarification: str | None = None) -> list[dict]:
+def resolve_candidates(
+    company_name: str | None, ticker: str | None, clarification: str | None = None
+) -> list[dict]:
     companies = load_reference_companies()
-    return resolve_candidates_from_records(companies, company_name, ticker, clarification=clarification)
+    return resolve_candidates_from_records(
+        companies, company_name, ticker, clarification=clarification
+    )
 
 
-def resolve_candidates_from_records(companies: list[dict], company_name: str | None, ticker: str | None, clarification: str | None = None) -> list[dict]:
+def resolve_candidates_from_records(
+    companies: list[dict],
+    company_name: str | None,
+    ticker: str | None,
+    clarification: str | None = None,
+) -> list[dict]:
     normalized_ticker = ticker.strip().upper() if ticker else None
     search_terms = [normalize_alias(value) for value in [company_name, clarification] if value]
     search_terms = [term for term in search_terms if term]
 
     if normalized_ticker:
-        exact_ticker_matches = [company for company in companies if company["ticker"].upper() == normalized_ticker]
+        exact_ticker_matches = [
+            company for company in companies if company["ticker"].upper() == normalized_ticker
+        ]
         if exact_ticker_matches:
             return exact_ticker_matches
 
@@ -109,13 +121,19 @@ def resolve_candidates_from_records(companies: list[dict], company_name: str | N
             continue
 
         normalized_name = normalize_alias(company["name"])
-        if any(term in normalized_name or normalized_name in term for term in search_terms if len(term) >= 3):
+        if any(
+            term in normalized_name or normalized_name in term
+            for term in search_terms
+            if len(term) >= 3
+        ):
             partial_matches.append(company)
 
     return exact_matches or partial_matches
 
 
-def resolve_company(company_name: str | None, ticker: str | None, clarification: str | None = None) -> ResolvedCompany | AmbiguousCompanyMatch | CompanyNotFound:
+def resolve_company(
+    company_name: str | None, ticker: str | None, clarification: str | None = None
+) -> ResolvedCompany | AmbiguousCompanyMatch | CompanyNotFound:
     candidates = resolve_candidates(company_name, ticker, clarification=clarification)
 
     if not candidates:

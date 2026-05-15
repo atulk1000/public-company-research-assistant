@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import os
+import sys
+import time
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-import os
 from pathlib import Path
-import sys
-import time
 
 import psycopg
 from psycopg.rows import dict_row
@@ -19,7 +19,6 @@ from ingestion.fetch_company_facts import extract_usd_facts, fetch_company_facts
 from ingestion.fetch_sec_filings import extract_recent_filings, fetch_submissions
 from ingestion.raw_storage import company_facts_path, save_json, submissions_path
 from ingestion.source_registry import is_supported_currency_unit, is_supported_structured_form
-
 
 REQUEST_PAUSE_SECONDS = 0.25
 
@@ -94,8 +93,12 @@ def get_connection():
 def load_settings() -> IngestionSettings:
     target_tickers = os.getenv("TARGET_TICKERS", "MSFT,GOOGL,AMZN")
     return IngestionSettings(
-        database_url=os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/company_assistant"),
-        ticker_list=[ticker.strip().upper() for ticker in target_tickers.split(",") if ticker.strip()],
+        database_url=os.getenv(
+            "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/company_assistant"
+        ),
+        ticker_list=[
+            ticker.strip().upper() for ticker in target_tickers.split(",") if ticker.strip()
+        ],
     )
 
 
@@ -135,7 +138,9 @@ def clear_company_data(conn: psycopg.Connection, company_id: int) -> None:
         cursor.execute("DELETE FROM filings WHERE company_id = %s;", (company_id,))
 
 
-def replace_filings(conn: psycopg.Connection, company: CompanyRecord, filings: list[dict]) -> dict[tuple[str, str], int]:
+def replace_filings(
+    conn: psycopg.Connection, company: CompanyRecord, filings: list[dict]
+) -> dict[tuple[str, str], int]:
     with conn.cursor() as cursor:
         for filing in filings:
             cursor.execute(
@@ -156,7 +161,9 @@ def replace_filings(conn: psycopg.Connection, company: CompanyRecord, filings: l
                     filing["accession_no"],
                     filing["form_type"],
                     filing["filing_date"],
-                    filing_source_url(company.cik, filing["accession_no"], filing.get("primary_document")),
+                    filing_source_url(
+                        company.cik, filing["accession_no"], filing.get("primary_document")
+                    ),
                 ),
             )
 
@@ -260,8 +267,12 @@ def duration_days(row: dict) -> int | None:
     return (end - start).days + 1
 
 
-def preferred_duration_for_period(facts_for_period: list[dict], fiscal_quarter: str | None) -> int | None:
-    durations = sorted({duration for row in facts_for_period if (duration := duration_days(row)) is not None})
+def preferred_duration_for_period(
+    facts_for_period: list[dict], fiscal_quarter: str | None
+) -> int | None:
+    durations = sorted(
+        {duration for row in facts_for_period if (duration := duration_days(row)) is not None}
+    )
     if not durations:
         return None
 
@@ -284,9 +295,12 @@ def preferred_duration_for_period(facts_for_period: list[dict], fiscal_quarter: 
     return max(durations)
 
 
-def preferred_unit_for_period(facts_for_period: list[dict], preferred_duration: int | None) -> str | None:
+def preferred_unit_for_period(
+    facts_for_period: list[dict], preferred_duration: int | None
+) -> str | None:
     duration_filtered = [
-        row for row in facts_for_period
+        row
+        for row in facts_for_period
         if preferred_duration is None or duration_days(row) == preferred_duration
     ]
     if not duration_filtered:
@@ -294,7 +308,9 @@ def preferred_unit_for_period(facts_for_period: list[dict], preferred_duration: 
 
     revenue_candidates = []
     for row in duration_filtered:
-        if row["concept"] in CONCEPT_ALIASES["revenue"] and is_supported_currency_unit(row.get("unit")):
+        if row["concept"] in CONCEPT_ALIASES["revenue"] and is_supported_currency_unit(
+            row.get("unit")
+        ):
             revenue_candidates.append(row)
 
     if revenue_candidates:
@@ -415,7 +431,11 @@ def build_metric_rows(company: CompanyRecord, facts: list[dict]) -> list[dict]:
         previous_revenue = None
         if fiscal_year is not None:
             previous_revenue = revenue_lookup.get((fiscal_year - 1, fiscal_quarter))
-        row["revenue_growth_yoy"] = safe_ratio(revenue - previous_revenue, previous_revenue) if revenue and previous_revenue else None
+        row["revenue_growth_yoy"] = (
+            safe_ratio(revenue - previous_revenue, previous_revenue)
+            if revenue and previous_revenue
+            else None
+        )
         if fiscal_year is not None and revenue is not None:
             revenue_lookup[(fiscal_year, fiscal_quarter)] = revenue
 
@@ -425,7 +445,9 @@ def build_metric_rows(company: CompanyRecord, facts: list[dict]) -> list[dict]:
     return metric_rows
 
 
-def replace_derived_metrics(conn: psycopg.Connection, company: CompanyRecord, metric_rows: list[dict]) -> None:
+def replace_derived_metrics(
+    conn: psycopg.Connection, company: CompanyRecord, metric_rows: list[dict]
+) -> None:
     with conn.cursor() as cursor:
         for row in metric_rows:
             cursor.execute(
@@ -507,7 +529,9 @@ def main() -> None:
     with get_connection() as conn:
         companies = load_target_companies(conn, settings.ticker_list)
         if not companies:
-            raise RuntimeError("No target companies found. Apply db/seed.sql before running SEC ingestion.")
+            raise RuntimeError(
+                "No target companies found. Apply db/seed.sql before running SEC ingestion."
+            )
 
         results: dict[str, dict[str, int]] = {}
         for company in companies:

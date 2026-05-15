@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
 import psycopg
 from openai import OpenAI
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
-
 
 EMBEDDING_DIMENSIONS = 1536
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/company_assistant"
@@ -109,7 +108,10 @@ def update_embeddings(conn, batch: list[dict], embeddings: list[list[float]]) ->
             SET embedding = %s
             WHERE chunk_id = %s;
             """,
-            [(embedding, row["chunk_id"]) for row, embedding in zip(batch, embeddings, strict=True)],
+            [
+                (embedding, row["chunk_id"])
+                for row, embedding in zip(batch, embeddings, strict=True)
+            ],
         )
 
 

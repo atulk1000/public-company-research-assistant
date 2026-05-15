@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 
 @dataclass
@@ -26,11 +26,15 @@ def split_long_paragraph(paragraph: str, chunk_size: int, overlap: int) -> list[
 
 
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> list[Chunk]:
-    raw_paragraphs = [paragraph.strip() for paragraph in re.split(r"\n{2,}", text) if paragraph.strip()]
+    raw_paragraphs = [
+        paragraph.strip() for paragraph in re.split(r"\n{2,}", text) if paragraph.strip()
+    ]
     paragraphs: list[str] = []
     for paragraph in raw_paragraphs:
         if len(paragraph) > chunk_size:
-            paragraphs.extend(split_long_paragraph(paragraph, chunk_size=chunk_size, overlap=overlap))
+            paragraphs.extend(
+                split_long_paragraph(paragraph, chunk_size=chunk_size, overlap=overlap)
+            )
         else:
             paragraphs.append(paragraph)
 

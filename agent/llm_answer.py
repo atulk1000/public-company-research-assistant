@@ -47,7 +47,13 @@ def format_retrieved_evidence(retrieved_evidence: list[dict] | None, max_items: 
     return json.dumps(payload, indent=2)
 
 
-def compose_answer(question: str, route: str, route_reasons: list[str], structured_evidence: dict | None, retrieved_evidence: list[dict] | None) -> str:
+def compose_answer(
+    question: str,
+    route: str,
+    route_reasons: list[str],
+    structured_evidence: dict | None,
+    retrieved_evidence: list[dict] | None,
+) -> str:
     try:
         settings = get_settings()
         client = get_openai_client()
@@ -65,7 +71,9 @@ def compose_answer(question: str, route: str, route_reasons: list[str], structur
         )
         return response.output_text.strip()
     except Exception as exc:
-        fallback = fallback_answer_compose.compose_answer(question, route, structured_evidence, retrieved_evidence)
+        fallback = fallback_answer_compose.compose_answer(
+            question, route, structured_evidence, retrieved_evidence
+        )
         return (
             f"{fallback}\n\n"
             f"Note: the configured OpenAI model could not complete final synthesis, so this answer used the local fallback composer. "

@@ -10,7 +10,6 @@ from agent.router import classify_question
 from agent.sql_tool import run_sql
 from ingestion.live_ingest import run_live_ingestion
 
-
 ProgressCallback = Callable[[str, str], None]
 
 
@@ -49,7 +48,9 @@ def answer_question_live(
     progress_callback: ProgressCallback | None = None,
 ) -> dict:
     plan = plan_question(question, clarification=clarification_response)
-    resolution = resolve_company(plan.company_name, plan.ticker, clarification=clarification_response)
+    resolution = resolve_company(
+        plan.company_name, plan.ticker, clarification=clarification_response
+    )
 
     if resolution.status == "ambiguous" and not clarification_response:
         return {
@@ -62,7 +63,9 @@ def answer_question_live(
             "answer": resolution.message,
             "planning": plan.model_dump(),
             "clarification_message": resolution.message,
-            "clarification_candidates": [candidate.model_dump() for candidate in resolution.candidates],
+            "clarification_candidates": [
+                candidate.model_dump() for candidate in resolution.candidates
+            ],
         }
 
     if resolution.status == "ambiguous" and clarification_response:

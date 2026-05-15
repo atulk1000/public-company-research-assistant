@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
-from pathlib import Path
 import re
 import statistics
 import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -16,8 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from agent.hybrid_tool import answer_question
 
-
-CITATION_PATTERN = re.compile(r"\[(?:SQL|DOC):[^\]]+\]")
+CITATION_PATTERN = re.compile(r"(?:\[?(?:SQL|DOC):[A-Z0-9_./:-]+[^\]\s,.]*\]?)")
 
 
 @dataclass
@@ -82,6 +81,10 @@ def resolved_tickers(response: dict[str, Any]) -> set[str]:
         ticker = row.get("ticker")
         if ticker:
             tickers.add(str(ticker).upper())
+
+    structured_sql = (response.get("structured_evidence") or {}).get("sql") or ""
+    for ticker in re.findall(r"'([A-Z]{1,6})'", structured_sql):
+        tickers.add(ticker.upper())
 
     retrieved_rows = response.get("retrieved_evidence") or []
     for item in retrieved_rows:
@@ -190,25 +193,33 @@ def ratio(numerator: int, denominator: int) -> float:
 
 
 def aggregate_metrics(cases: list[EvalCase], results: list[CaseResult]) -> dict[str, Any]:
-    success_results = [result for case, result in zip(cases, results, strict=True) if case.expected_status == "success"]
+    success_results = [
+        result
+        for case, result in zip(cases, results, strict=True)
+        if case.expected_status == "success"
+    ]
 
     structured_results = [
-        result for case, result in zip(cases, results, strict=True)
+        result
+        for case, result in zip(cases, results, strict=True)
         if case.requires_structured and case.expected_status == "success"
     ]
 
     retrieval_results = [
-        result for case, result in zip(cases, results, strict=True)
+        result
+        for case, result in zip(cases, results, strict=True)
         if case.requires_retrieval and case.expected_status == "success"
     ]
 
     citation_results = [
-        result for case, result in zip(cases, results, strict=True)
+        result
+        for case, result in zip(cases, results, strict=True)
         if case.require_citations and case.expected_status == "success"
     ]
 
     live_results = [
-        result for case, result in zip(cases, results, strict=True)
+        result
+        for case, result in zip(cases, results, strict=True)
         if case.live_analysis and case.expected_status == "success"
     ]
 
@@ -216,13 +227,17 @@ def aggregate_metrics(cases: list[EvalCase], results: list[CaseResult]) -> dict[
         "case_count": len(cases),
         "successful_case_count": len(success_results),
         "pass_rate": ratio(sum(result.passed for result in results), len(results)),
-        "routing_accuracy": ratio(sum(result.route_match for result in success_results), len(success_results)),
+        "routing_accuracy": ratio(
+            sum(result.route_match for result in success_results), len(success_results)
+        ),
         "status_accuracy": ratio(sum(result.status_match for result in results), len(results)),
         "company_resolution_accuracy": ratio(
             sum(result.company_match for result in success_results),
             len(success_results),
         ),
-        "sql_generation_rate": ratio(sum(result.sql_present for result in structured_results), len(structured_results)),
+        "sql_generation_rate": ratio(
+            sum(result.sql_present for result in structured_results), len(structured_results)
+        ),
         "sql_execution_validity": ratio(
             sum(result.sql_rows_nonempty for result in structured_results),
             len(structured_results),
@@ -231,18 +246,26 @@ def aggregate_metrics(cases: list[EvalCase], results: list[CaseResult]) -> dict[
             sum(result.retrieval_nonempty for result in retrieval_results),
             len(retrieval_results),
         ),
-        "citation_coverage": ratio(sum(result.citations_present for result in citation_results), len(citation_results)),
+        "citation_coverage": ratio(
+            sum(result.citations_present for result in citation_results), len(citation_results)
+        ),
         "faithfulness_proxy": ratio(
             sum(result.faithfulness_proxy_pass for result in success_results),
             len(success_results),
         ),
-        "freshness_metadata_rate": ratio(sum(result.freshness_present for result in live_results), len(live_results)),
-        "notes_per_case_avg": statistics.mean(len(result.notes) for result in results) if results else 0.0,
+        "freshness_metadata_rate": ratio(
+            sum(result.freshness_present for result in live_results), len(live_results)
+        ),
+        "notes_per_case_avg": (
+            statistics.mean(len(result.notes) for result in results) if results else 0.0
+        ),
     }
     return metrics
 
 
-def print_summary(cases: list[EvalCase], results: list[CaseResult], metrics: dict[str, Any]) -> None:
+def print_summary(
+    cases: list[EvalCase], results: list[CaseResult], metrics: dict[str, Any]
+) -> None:
     print("Public Company Research Assistant evaluation summary")
     print(f"- benchmark cases: {metrics['case_count']}")
     print(f"- pass rate: {metrics['pass_rate']:.2%}")
@@ -268,7 +291,9 @@ def print_summary(cases: list[EvalCase], results: list[CaseResult], metrics: dic
                 print(f"  - {note}")
 
 
-def write_json_report(cases: list[EvalCase], results: list[CaseResult], metrics: dict[str, Any]) -> Path:
+def write_json_report(
+    cases: list[EvalCase], results: list[CaseResult], metrics: dict[str, Any]
+) -> Path:
     report_path = Path(__file__).with_name("latest_eval_report.json")
     payload = {
         "metrics": metrics,

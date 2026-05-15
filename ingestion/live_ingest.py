@@ -19,7 +19,6 @@ from ingestion.freshness import (
 from ingestion.load_filing_texts import ingest_company_documents
 from ingestion.load_sec_data import CompanyRecord, ingest_company
 
-
 ProgressCallback = Callable[[str, str], None]
 
 
@@ -77,7 +76,9 @@ def run_live_ingestion(
     progress_callback: ProgressCallback | None = None,
 ) -> LiveIngestResult:
     require_unstructured = "unstructured" in required_sources
-    report_progress(progress_callback, "resolve", f"Resolved {resolved.company_name} ({resolved.ticker}).")
+    report_progress(
+        progress_callback, "resolve", f"Resolved {resolved.company_name} ({resolved.ticker})."
+    )
 
     with get_connection() as conn:
         company = upsert_company(conn, resolved)
@@ -102,7 +103,9 @@ def run_live_ingestion(
     with get_connection() as conn:
         refreshed_company = upsert_company(conn, resolved)
         structured_counts = ingest_company(conn, refreshed_company)
-        freshness_row = upsert_company_freshness(conn, refreshed_company.company_id, structured_refreshed=True)
+        freshness_row = upsert_company_freshness(
+            conn, refreshed_company.company_id, structured_refreshed=True
+        )
         conn.commit()
 
     document_counts = {"documents": 0, "chunks": 0}
@@ -110,7 +113,9 @@ def run_live_ingestion(
     latest_freshness = freshness_row
 
     if require_unstructured:
-        report_progress(progress_callback, "documents", "Fetching filing documents and parsing text...")
+        report_progress(
+            progress_callback, "documents", "Fetching filing documents and parsing text..."
+        )
         with get_connection() as conn:
             refreshed_company = upsert_company(conn, resolved)
             document_counts = ingest_company_documents(
@@ -118,14 +123,20 @@ def run_live_ingestion(
                 refreshed_company,
                 filing_limit=get_settings().max_document_filings_per_company,
             )
-            latest_freshness = upsert_company_freshness(conn, refreshed_company.company_id, documents_refreshed=True)
+            latest_freshness = upsert_company_freshness(
+                conn, refreshed_company.company_id, documents_refreshed=True
+            )
             conn.commit()
 
-        report_progress(progress_callback, "embeddings", "Generating embeddings for filing chunks...")
+        report_progress(
+            progress_callback, "embeddings", "Generating embeddings for filing chunks..."
+        )
         updated_chunks, batches = embed_pending_chunks(company_id=refreshed_company.company_id)
         embedding_counts = {"updated_chunks": updated_chunks, "batches": batches}
         with get_connection() as conn:
-            latest_freshness = upsert_company_freshness(conn, refreshed_company.company_id, embeddings_refreshed=True)
+            latest_freshness = upsert_company_freshness(
+                conn, refreshed_company.company_id, embeddings_refreshed=True
+            )
             conn.commit()
 
     refresh_company_catalog()
