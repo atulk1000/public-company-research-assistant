@@ -4,9 +4,13 @@ from collections.abc import Callable
 
 from agent.company_resolver import resolve_company
 from agent.llm_answer import compose_answer
+from agent.plan_validator import validate_plan_evidence
 from agent.planner import plan_question
 from agent.rag_tool import retrieve_evidence
-from agent.router import classify_question
+from agent.research_agent import ResearchAgent
+from agent.research_plan import ResearchPlan
+from agent.research_planner import create_research_plan, plan_context_question
+from agent.scope import decide_scope
 from agent.sql_tool import run_sql
 from ingestion.live_ingest import run_live_ingestion
 
@@ -14,32 +18,7 @@ ProgressCallback = Callable[[str, str], None]
 
 
 def answer_question_cached(question: str) -> dict:
-    decision = classify_question(question)
-
-    structured_evidence = None
-    retrieved_evidence = None
-
-    if decision.route in {"sql", "hybrid"}:
-        structured_evidence = run_sql(question)
-    if decision.route in {"rag", "hybrid"}:
-        retrieved_evidence = retrieve_evidence(question)
-
-    answer = compose_answer(
-        question,
-        decision.route,
-        decision.reasons,
-        structured_evidence,
-        retrieved_evidence,
-    )
-    return {
-        "status": "success",
-        "mode": "cached",
-        "route": decision.route,
-        "route_reasons": decision.reasons,
-        "structured_evidence": structured_evidence,
-        "retrieved_evidence": retrieved_evidence,
-        "answer": answer,
-    }
+    return ResearchAgent().run_response(question, mode="cached")
 
 
 def answer_question_live(
@@ -47,6 +26,14 @@ def answer_question_live(
     clarification_response: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> dict:
+    research_plan = create_research_plan(question)
+    if len(research_plan.companies) > 1:
+        return answer_question_live_multi_company(
+            question,
+            research_plan,
+            progress_callback=progress_callback,
+        )
+
     plan = plan_question(question, clarification=clarification_response)
     resolution = resolve_company(
         plan.company_name, plan.ticker, clarification=clarification_response
@@ -147,20 +134,183 @@ def answer_question_live(
     }
 
 
+def answer_question_live_multi_company(
+    question: str,
+    research_plan: ResearchPlan,
+    progress_callback: ProgressCallback | None = None,
+) -> dict:
+    resolutions = []
+    for ticker in research_plan.companies:
+        if progress_callback:
+            progress_callback("resolve", f"Resolving {ticker}...")
+        resolution = resolve_company(ticker, ticker)
+        if resolution.status != "resolved":
+            return {
+                "status": "not_found",
+                "mode": "live",
+                "route": research_plan.route_hint,
+                "route_reasons": [
+                    research_plan.rationale,
+                    f"Could not resolve planned company {ticker}.",
+                ],
+                "structured_evidence": None,
+                "retrieved_evidence": None,
+                "answer": (
+                    f"Sorry, I could not confidently identify {ticker}. "
+                    "Please use valid US-listed company names or tickers."
+                ),
+                "research_plan": research_plan.to_trace_dict(),
+            }
+        resolutions.append(resolution)
+
+    live_results = []
+    for index, resolution in enumerate(resolutions, start=1):
+        if progress_callback:
+            progress_callback(
+                "cache",
+                f"Checking live cache for {resolution.ticker} ({index}/{len(resolutions)})...",
+            )
+        live_results.append(
+            run_live_ingestion(
+                resolution,
+                required_sources=research_plan.required_sources,
+                progress_callback=progress_callback,
+            )
+        )
+
+    requested_tickers = [resolution.ticker for resolution in resolutions]
+    route_reasons = [
+        research_plan.rationale,
+        f"research_plan=tier:{research_plan.tier_hint}",
+        "resolved_companies=" + ",".join(requested_tickers),
+    ]
+    route_reasons.extend(
+        f"live_ingest:{result.ticker}={'cache_hit' if result.used_cache else 'refreshed'}"
+        for result in live_results
+    )
+
+    structured_evidence = None
+    retrieved_evidence = None
+    analysis_question = plan_context_question(research_plan)
+
+    if research_plan.route_hint in {"sql", "hybrid"}:
+        if progress_callback:
+            progress_callback("analysis", "Running structured multi-company analysis...")
+        structured_evidence = run_sql(analysis_question, requested_tickers=requested_tickers)
+
+    if research_plan.route_hint in {"rag", "hybrid"}:
+        if progress_callback:
+            progress_callback("analysis", "Retrieving multi-company filing evidence...")
+        retrieved_evidence = retrieve_evidence(
+            analysis_question,
+            top_k=max(6, 6 * len(requested_tickers)),
+            requested_tickers=requested_tickers,
+        )
+
+    plan_validation = validate_plan_evidence(
+        research_plan,
+        structured_evidence,
+        retrieved_evidence,
+    )
+    route_reasons.extend(plan_validation.get("warnings", []))
+
+    if progress_callback:
+        progress_callback("answer", "Preparing final answer...")
+
+    answer = compose_answer(
+        question,
+        research_plan.route_hint,
+        route_reasons,
+        structured_evidence,
+        retrieved_evidence,
+    )
+
+    return {
+        "status": "success",
+        "mode": "live",
+        "route": research_plan.route_hint,
+        "route_reasons": route_reasons,
+        "structured_evidence": structured_evidence,
+        "retrieved_evidence": retrieved_evidence,
+        "answer": answer,
+        "research_plan": research_plan.to_trace_dict(),
+        "plan_validation": plan_validation,
+        "resolved_companies": [resolution.model_dump() for resolution in resolutions],
+        "live_ingestions": [_live_ingest_payload(result) for result in live_results],
+        "live_ingestion": _aggregate_live_ingestion(live_results),
+    }
+
+
+def _live_ingest_payload(result) -> dict:
+    return {
+        "ticker": result.ticker,
+        "company_name": result.company_name,
+        "used_cache": result.used_cache,
+        "structured_counts": result.structured_counts,
+        "document_counts": result.document_counts,
+        "embedding_counts": result.embedding_counts,
+        "freshness": result.freshness,
+    }
+
+
+def _aggregate_live_ingestion(results: list) -> dict:
+    return {
+        "used_cache": all(result.used_cache for result in results),
+        "companies": [_live_ingest_payload(result) for result in results],
+        "structured_counts": {
+            "metric_rows": sum(result.structured_counts.get("metric_rows", 0) for result in results)
+        },
+        "document_counts": {
+            "documents": sum(result.document_counts.get("documents", 0) for result in results)
+        },
+        "embedding_counts": {
+            "updated_chunks": sum(
+                result.embedding_counts.get("updated_chunks", 0) for result in results
+            )
+        },
+        "freshness": None,
+    }
+
+
 def answer_question(
     question: str,
     live_analysis: bool = False,
     clarification_response: str | None = None,
     progress_callback: ProgressCallback | None = None,
+    return_trace: bool = False,
 ) -> dict:
     try:
+        scope_decision = decide_scope(question)
+        scope_plan = create_research_plan(question, scope_decision=scope_decision)
+        if not scope_plan.in_scope:
+            return {
+                "status": "out_of_scope",
+                "mode": "live" if live_analysis else "cached",
+                "route": "out_of_scope",
+                "route_reasons": [scope_plan.refusal_reason or "Question is out of scope."],
+                "structured_evidence": None,
+                "retrieved_evidence": None,
+                "answer": (
+                    f"{scope_plan.refusal_reason} Please ask a question about a US public "
+                    "company's financial metrics, SEC filings, risks, strategy, or management commentary."
+                ),
+                "research_plan": scope_plan.to_trace_dict(),
+                "plan_validation": {
+                    "passed": False,
+                    "warnings": [scope_plan.refusal_reason] if scope_plan.refusal_reason else [],
+                    "needs_retry": False,
+                },
+            }
         if live_analysis:
             return answer_question_live(
                 question,
                 clarification_response=clarification_response,
                 progress_callback=progress_callback,
             )
-        return answer_question_cached(question)
+        result = answer_question_cached(question)
+        if not return_trace:
+            result.pop("agent_trace", None)
+        return result
     except Exception as exc:
         return {
             "status": "error",

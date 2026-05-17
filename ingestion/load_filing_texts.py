@@ -22,8 +22,13 @@ from ingestion.load_sec_data import (
     load_settings,
     load_target_companies,
 )
-from ingestion.raw_storage import filing_html_path, save_text
+from ingestion.raw_storage import exhibit_html_path, filing_html_path, save_text
 from ingestion.sec_api import sec_headers
+from ingestion.sec_exhibits import fetch_filing_index, extract_high_value_exhibits
+from ingestion.source_registry import (
+    document_form_priority_case_sql,
+    is_supported_event_exhibit_parent_form,
+)
 
 REQUEST_PAUSE_SECONDS = 0.25
 DEFAULT_MAX_FILINGS_PER_COMPANY = 12
@@ -114,20 +119,16 @@ def max_filings_per_company() -> int:
 
 
 def load_recent_filings(conn, company: CompanyRecord, limit: int) -> list[dict]:
+    priority_case = document_form_priority_case_sql("form_type")
     with conn.cursor() as cursor:
         cursor.execute(
-            """
-            SELECT filing_id, form_type, filing_date::text AS filing_date, source_url
+            f"""
+            SELECT filing_id, accession_no, form_type, filing_date::text AS filing_date, source_url
             FROM filings
             WHERE company_id = %s
               AND source_url IS NOT NULL
             ORDER BY
-                CASE
-                    WHEN form_type IN ('10-Q', '10-Q/A', '10-K', '10-K/A', '20-F', '20-F/A', '40-F', '40-F/A') THEN 1
-                    WHEN form_type IN ('6-K', '6-K/A', '8-K', '8-K/A') THEN 2
-                    WHEN form_type IN ('DEF 14A', 'DEFA14A') THEN 3
-                    ELSE 4
-                END,
+                {priority_case},
                 filing_date DESC
             LIMIT %s;
             """,
@@ -166,7 +167,18 @@ def clear_company_documents(conn, company_id: int) -> None:
         cursor.execute("DELETE FROM documents WHERE company_id = %s;", (company_id,))
 
 
-def insert_document(conn, company: CompanyRecord, filing: dict, raw_text: str) -> int:
+def insert_document(
+    conn,
+    company: CompanyRecord,
+    filing: dict,
+    raw_text: str,
+    doc_type: str | None = None,
+    title: str | None = None,
+    source_url: str | None = None,
+) -> int:
+    final_doc_type = doc_type or filing["form_type"]
+    final_source_url = source_url or filing["source_url"]
+    final_title = title or f"{company.ticker} {final_doc_type} {filing['filing_date']}"
     with conn.cursor() as cursor:
         cursor.execute(
             """
@@ -185,10 +197,10 @@ def insert_document(conn, company: CompanyRecord, filing: dict, raw_text: str) -
             (
                 company.company_id,
                 filing["filing_id"],
-                filing["form_type"],
-                f"{company.ticker} {filing['form_type']} {filing['filing_date']}",
+                final_doc_type,
+                final_title,
                 filing["filing_date"],
-                filing["source_url"],
+                final_source_url,
                 raw_text,
             ),
         )
@@ -229,35 +241,115 @@ def insert_chunks(conn, document_id: int, company_id: int, chunks) -> int:
     return inserted
 
 
+def ingest_document_text(
+    conn,
+    company: CompanyRecord,
+    filing: dict,
+    raw_text: str,
+    doc_type: str | None = None,
+    title: str | None = None,
+    source_url: str | None = None,
+) -> dict[str, int]:
+    if len(raw_text) < 500:
+        return {"documents": 0, "chunks": 0}
+
+    document_id = insert_document(
+        conn,
+        company,
+        filing,
+        raw_text,
+        doc_type=doc_type,
+        title=title,
+        source_url=source_url,
+    )
+    chunks = chunk_text(raw_text, chunk_size=1200, overlap=150)
+    return {
+        "documents": 1,
+        "chunks": insert_chunks(conn, document_id, company.company_id, chunks),
+    }
+
+
+def ingest_filing_exhibits(conn, company: CompanyRecord, filing: dict) -> dict[str, int]:
+    if not is_supported_event_exhibit_parent_form(filing["form_type"]):
+        return {"documents": 0, "chunks": 0, "exhibits": 0}
+
+    try:
+        index_payload = fetch_filing_index(filing["source_url"])
+        exhibits = extract_high_value_exhibits(index_payload, filing["source_url"])
+    except Exception:
+        return {"documents": 0, "chunks": 0, "exhibits": 0}
+
+    document_count = 0
+    chunk_count = 0
+    exhibit_count = 0
+    for exhibit in exhibits:
+        try:
+            html = fetch_filing_html(exhibit.source_url)
+        except Exception:
+            continue
+        save_text(
+            html,
+            exhibit_html_path(
+                company.ticker,
+                filing["filing_date"],
+                filing["form_type"],
+                filing["accession_no"],
+                exhibit.exhibit_type,
+                exhibit.filename,
+            ),
+        )
+        time.sleep(REQUEST_PAUSE_SECONDS)
+        raw_text = html_to_text(html)
+        counts = ingest_document_text(
+            conn,
+            company,
+            filing,
+            raw_text,
+            doc_type=f"{filing['form_type']} {exhibit.exhibit_type}",
+            title=(
+                f"{company.ticker} {filing['form_type']} {exhibit.exhibit_type} "
+                f"{filing['filing_date']}"
+            ),
+            source_url=exhibit.source_url,
+        )
+        if counts["documents"]:
+            exhibit_count += 1
+            document_count += counts["documents"]
+            chunk_count += counts["chunks"]
+
+    return {"documents": document_count, "chunks": chunk_count, "exhibits": exhibit_count}
+
+
 def ingest_company_documents(conn, company: CompanyRecord, filing_limit: int) -> dict[str, int]:
     filings = load_recent_filings(conn, company, filing_limit)
     clear_company_documents(conn, company.company_id)
 
     document_count = 0
     chunk_count = 0
+    exhibit_count = 0
     for filing in filings:
         html = fetch_filing_html(filing["source_url"])
-        accession_no = filing["source_url"].rstrip("/").split("/")[-2]
         save_text(
             html,
             filing_html_path(
                 company.ticker,
                 filing["filing_date"],
                 filing["form_type"],
-                accession_no,
+                filing["accession_no"],
             ),
         )
         time.sleep(REQUEST_PAUSE_SECONDS)
         raw_text = html_to_text(html)
-        if len(raw_text) < 500:
-            continue
+        counts = ingest_document_text(conn, company, filing, raw_text)
+        document_count += counts["documents"]
+        chunk_count += counts["chunks"]
 
-        document_id = insert_document(conn, company, filing, raw_text)
-        chunks = chunk_text(raw_text, chunk_size=1200, overlap=150)
-        chunk_count += insert_chunks(conn, document_id, company.company_id, chunks)
-        document_count += 1
+        exhibit_counts = ingest_filing_exhibits(conn, company, filing)
+        document_count += exhibit_counts["documents"]
+        chunk_count += exhibit_counts["chunks"]
+        exhibit_count += exhibit_counts["exhibits"]
 
-    return {"documents": document_count, "chunks": chunk_count}
+    return {"documents": document_count, "chunks": chunk_count, "exhibits": exhibit_count}
 
 
 def main() -> None:

@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.company_universe import parse_target_tickers
 from ingestion.embed_chunks import embed_pending_chunks
 from ingestion.fetch_company_facts import extract_usd_facts
 from ingestion.fetch_sec_filings import extract_recent_filings
@@ -28,12 +29,13 @@ from ingestion.load_sec_data import (
     replace_filings,
 )
 from ingestion.raw_storage import RAW_SEC_ROOT
+from ingestion.source_registry import document_form_priority_case_sql
 
 
 def target_tickers() -> list[str]:
     raw_value = os.getenv("TARGET_TICKERS", "").strip()
     if raw_value:
-        return [ticker.strip().upper() for ticker in raw_value.split(",") if ticker.strip()]
+        return parse_target_tickers(raw_value)
     return sorted(path.name.upper() for path in RAW_SEC_ROOT.iterdir() if path.is_dir())
 
 
@@ -66,20 +68,16 @@ def company_from_raw(
 
 
 def filing_rows_by_accession(conn: psycopg.Connection, company_id: int, limit: int) -> list[dict]:
+    priority_case = document_form_priority_case_sql("form_type")
     with conn.cursor() as cursor:
         cursor.execute(
-            """
+            f"""
             SELECT filing_id, accession_no, form_type, filing_date::text AS filing_date, source_url
             FROM filings
             WHERE company_id = %s
               AND source_url IS NOT NULL
             ORDER BY
-                CASE
-                    WHEN form_type IN ('10-Q', '10-Q/A', '10-K', '10-K/A', '20-F', '20-F/A', '40-F', '40-F/A') THEN 1
-                    WHEN form_type IN ('6-K', '6-K/A', '8-K', '8-K/A') THEN 2
-                    WHEN form_type IN ('DEF 14A', 'DEFA14A') THEN 3
-                    ELSE 4
-                END,
+                {priority_case},
                 filing_date DESC
             LIMIT %s;
             """,
@@ -194,7 +192,12 @@ def main() -> None:
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if api_key:
-        updated_chunks, batches = embed_pending_chunks()
+        updated_chunks = 0
+        batches = 0
+        for company_id in company_ids:
+            company_chunks, company_batches = embed_pending_chunks(company_id=company_id)
+            updated_chunks += company_chunks
+            batches += company_batches
         with get_connection() as conn:
             for company_id in company_ids:
                 upsert_company_freshness(

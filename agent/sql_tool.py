@@ -15,6 +15,7 @@ from agent.company_catalog import (
     alias_to_ticker_map,
     available_tickers,
     company_context_lines,
+    extract_ticker_mentions,
     normalize_alias,
 )
 from agent.openai_client import get_openai_client
@@ -90,7 +91,7 @@ def normalize_rows(rows: list[dict]) -> list[dict]:
 
 def extract_requested_tickers(question: str) -> list[str]:
     normalized = normalize_alias(question)
-    tickers: list[str] = []
+    tickers: list[str] = extract_ticker_mentions(question)
     for alias, ticker in alias_to_ticker_map().items():
         if not alias:
             continue

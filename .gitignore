@@ -8,6 +8,7 @@ __pycache__/
 .tmp/
 data/raw/
 data/processed/
+data/reference/sec/company_tickers.json
 *.db
 *.sqlite3
 evals/latest_eval_report.json
