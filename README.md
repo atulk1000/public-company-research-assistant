@@ -54,11 +54,11 @@ Most public-company LLM demos stop at one of these layers:
 - a metrics dashboard with no document reasoning
 - a prompt wrapper over external finance APIs
 
-This repo deliberately combines all three hard parts:
+This repo deliberately combines the hard parts of a grounded research product:
 
 - structured financial modeling
 - unstructured filing retrieval
-- LLM orchestration that decides when to use SQL, retrieval, or both
+- agentic LLM orchestration that plans the research task, validates evidence, and decides when to use SQL, retrieval, or both
 
 The result is a system that can answer questions like:
 
@@ -89,6 +89,7 @@ Current structured sources:
 Current unstructured sources:
 
 - recent `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`, `40-F`, `DEF 14A`, `DEFM14A`, `PREM14A`, `S-1` / `S-3` / `S-4`, `424B`, `425`, `FWP`, Forms `3` / `4` / `5`, Schedule `13D` / `13G`, `13F-HR`, and tender / merger forms such as `SC TO` and `SC 14D9`
+- high-value `8-K` / `6-K` `EX-99.*` exhibits, including SEC-filed earnings releases, guidance exhibits, and investor presentations when present in the filing package
 
 Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), then loaded into Postgres for analysis and retrieval. Those raw SEC files stay local by default because [data/raw](./data/raw) is gitignored.
 
@@ -112,7 +113,7 @@ In live mode, the app may:
 5. run SQL, RAG, or hybrid analysis
 6. return a grounded answer with evidence and limitations
 
-The live path is designed for one-company-at-a-time analysis. Cold starts are slower, but the fetched company stays in the local store for future reuse.
+The live path supports both single-company and multi-company questions. Cold starts are slower, but every fetched company stays in the local store for future reuse.
 
 ## Product Screenshots
 
@@ -236,7 +237,7 @@ Important storage tables:
 
 ## Agentic Research Workflow
 
-The current workflow has evolved from SQL/RAG/hybrid routing into a bounded agentic research workflow. The original router still chooses the evidence route (`sql`, `rag`, or `hybrid`), and a higher-level `ResearchAgent` now chooses an execution tier before running the existing tools:
+The current workflow has evolved from SQL/RAG/hybrid routing into a bounded agentic research workflow. The agent first creates a structured research plan with companies, metrics, document themes, evidence requirements, and validation checks. It then chooses the evidence route (`sql`, `rag`, or `hybrid`) and an execution tier before running the tools:
 
 - SQL-fast for simple metric questions
 - RAG-fast for simple filing or commentary questions
@@ -282,7 +283,7 @@ When `Use live analysis` is enabled, the request path is:
 5. SQL, retrieval, or hybrid analysis runs against the refreshed local store
 6. the LLM writes the final answer from the retrieved evidence
 
-This lets the app stay lightweight locally while still supporting on-demand analysis for companies that are not preloaded.
+This lets the app stay lightweight locally while still supporting on-demand analysis for companies that are not part of the default seed set.
 
 Default freshness behavior:
 
@@ -300,18 +301,15 @@ Used now:
 - SEC XBRL / company facts
 - SEC-hosted filing documents
 - SEC ownership, proxy, registration/prospectus, tender, merger, and institutional-holdings primary filing documents
-
-Partially covered:
-
 - earnings releases and investor decks when they are filed as `EX-99`, `EX-99.1`, `EX-99.01`, `EX-99.2`, or `EX-99.02` exhibits inside `8-K` / `6-K` filing packages
 
 Not used yet:
 
-- lower-priority exhibit documents such as contracts, XBRL exhibits, certifications, graphics, and PDFs outside the high-value `EX-99.*` family
+- lower-priority exhibit documents such as contracts, certifications, graphics, and PDFs outside the high-value `EX-99.*` family
 - third-party market-data websites
 - unofficial earnings-call transcript sites
 - finance blogs or media summaries
-- non-SEC investor-relations sources such as decks or press-release pages
+- non-SEC investor-relations sources such as decks or press-release pages that are not filed with the SEC
 
 This is a deliberate product choice: the current version optimizes for reproducible, low-noise evidence rather than broad web coverage.
 
@@ -499,6 +497,7 @@ Invoke-RestMethod -Method Post `
 - company-aware retrieval when a question names multiple companies
 - quarter-aware SQL validation for quarter-based questions
 - broader SEC offline ingestion across domestic, foreign-issuer, event, proxy, and registration statement filings
+- SEC-filed `EX-99.*` exhibit retrieval for earnings releases and investor presentations
 - on-demand ingestion plus local cache reuse for newly requested companies
 
 ## Repo Walkthrough
@@ -517,12 +516,12 @@ If someone is inspecting the repo quickly, the highest-signal places to look are
 
 ## Current Limitations
 
-- the company universe is still intentionally small for local iteration
-- non-SEC sources such as transcripts, investor decks, and IR-hosted earnings releases are not ingested yet
+- the default seed universe is intentionally small for local iteration, though live mode can expand the local library
+- non-SEC sources such as transcripts, non-filed investor decks, and IR-hosted earnings releases are not ingested yet
 - retrieval quality is strong enough for demos, but still improvable
 - the Streamlit UI is an MVP, not a polished production frontend
 - evaluation is now benchmark-driven, but citation coverage and faithfulness are still heuristic rather than claim-by-claim verified
-- live mode is optimized for one-company analysis, not bulk market-wide ingestion
+- live mode supports multi-company questions, but it is not intended for bulk market-wide ingestion
 
 ## Why This Repo Is Useful
 
@@ -535,7 +534,7 @@ This project is meant to show more than prompt engineering. It demonstrates an e
 
 ## Next Improvements
 
-- add more public data sources such as `8-K` exhibits, proxy statements, earnings call transcripts, and investor presentations
+- add more public data sources such as earnings call transcripts, market data, analyst consensus, and non-SEC investor-relations materials
 - improve section-aware parsing for filings
 - deepen evaluation with claim-level faithfulness checks and retrieval relevance labels
 - improve citation rendering and analyst-style presentation in the UI
