@@ -1,9 +1,9 @@
 from ingestion.source_registry import (
     UNSTRUCTURED_SOURCE_LABELS,
     document_form_priority_case_sql,
-    is_supported_exhibit_type,
     is_supported_document_form,
     is_supported_event_exhibit_parent_form,
+    is_supported_exhibit_type,
     is_supported_structured_form,
 )
 

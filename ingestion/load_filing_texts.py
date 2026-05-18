@@ -24,7 +24,7 @@ from ingestion.load_sec_data import (
 )
 from ingestion.raw_storage import exhibit_html_path, filing_html_path, save_text
 from ingestion.sec_api import sec_headers
-from ingestion.sec_exhibits import fetch_filing_index, extract_high_value_exhibits
+from ingestion.sec_exhibits import extract_high_value_exhibits, fetch_filing_index
 from ingestion.source_registry import (
     document_form_priority_case_sql,
     is_supported_event_exhibit_parent_form,

@@ -5,8 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from agent.company_catalog import alias_to_ticker_map, normalize_alias
-from agent.company_catalog import extract_ticker_mentions
+from agent.company_catalog import alias_to_ticker_map, extract_ticker_mentions, normalize_alias
 from agent.router import classify_question, classify_question_fallback
 
 TierName = Literal["sql_fast", "rag_fast", "hybrid_fast", "deep_research"]
