@@ -107,9 +107,10 @@ def clear_pending_clarification() -> None:
     st.session_state["pending_live_analysis"] = False
 
 
-def make_progress_reporter():
-    status_placeholder = st.empty()
-    progress_bar = st.progress(0)
+def make_progress_reporter(container=None):
+    target = container or st
+    status_placeholder = target.empty()
+    progress_bar = target.progress(0)
 
     def reporter(step: str, message: str) -> None:
         progress_bar.progress(PROGRESS_STEPS.get(step, 5))
@@ -119,13 +120,21 @@ def make_progress_reporter():
 
 
 def run_analysis(
-    question: str, live_analysis: bool, clarification_response: str | None = None
+    question: str,
+    live_analysis: bool,
+    clarification_response: str | None = None,
+    progress_container=None,
 ) -> None:
     reporter = None
     status_placeholder = None
     progress_bar = None
+    cached_status_placeholder = None
     if live_analysis:
-        reporter, status_placeholder, progress_bar = make_progress_reporter()
+        reporter, status_placeholder, progress_bar = make_progress_reporter(progress_container)
+    elif progress_container is not None:
+        cached_status_placeholder = progress_container.empty()
+        cached_status_placeholder.info("Running analysis...")
+
     result = answer_question(
         question,
         live_analysis=live_analysis,
@@ -136,6 +145,8 @@ def run_analysis(
         progress_bar.progress(100)
     if status_placeholder is not None and result.get("status") == "success":
         status_placeholder.caption("Analysis complete.")
+    if cached_status_placeholder is not None:
+        cached_status_placeholder.empty()
 
     st.session_state["last_result"] = result
 
@@ -152,6 +163,8 @@ def render_status_banner(result: dict) -> None:
     status = result.get("status", "success")
     if status == "clarification_needed":
         st.warning(clean_display_text(result.get("answer", "")))
+    elif status == "out_of_scope":
+        st.warning(clean_display_text(result.get("answer", "")))
     elif status == "not_found":
         st.error(clean_display_text(result.get("answer", "")))
     elif status == "error":
@@ -167,6 +180,8 @@ def render_route_section(result: dict) -> None:
     mode = result.get("mode", "cached")
 
     planning = result.get("planning") or {}
+    research_plan = result.get("research_plan") or {}
+    plan_validation = result.get("plan_validation") or {}
     resolved_company = result.get("resolved_company") or {}
     live_ingestion = result.get("live_ingestion") or {}
 
@@ -185,6 +200,38 @@ def render_route_section(result: dict) -> None:
     if route_reasons:
         for reason in route_reasons:
             st.caption(clean_display_text(str(reason)))
+
+    if research_plan:
+        with st.expander("Research plan", expanded=True):
+            plan_cols = st.columns(3)
+            plan_cols[0].markdown(
+                "**Companies**  \n" + (", ".join(research_plan.get("companies") or []) or "n/a")
+            )
+            plan_cols[1].markdown(
+                "**Required metrics**  \n"
+                + (", ".join(research_plan.get("required_metrics") or []) or "n/a")
+            )
+            plan_cols[2].markdown(
+                "**Sources**  \n"
+                + (", ".join(research_plan.get("required_sources") or []) or "n/a")
+            )
+
+            themes = research_plan.get("document_themes") or []
+            if themes:
+                st.markdown("**Document themes**")
+                st.write(", ".join(themes))
+
+            steps = research_plan.get("planned_steps") or []
+            if steps:
+                st.markdown("**Planned steps**")
+                for step in steps:
+                    st.write(f"- {step}")
+
+            warnings = plan_validation.get("warnings") or []
+            if warnings:
+                st.markdown("**Plan validation warnings**")
+                for warning in warnings:
+                    st.warning(clean_display_text(str(warning)))
 
 
 def render_answer_section(result: dict) -> None:
@@ -327,6 +374,23 @@ def render_live_ingestion(result: dict) -> None:
         return
 
     st.subheader("Live Ingestion")
+    companies = live_ingestion.get("companies") or []
+    if companies:
+        rows = []
+        for company in companies:
+            rows.append(
+                {
+                    "Ticker": company.get("ticker"),
+                    "Company": company.get("company_name"),
+                    "Cache": "Hit" if company.get("used_cache") else "Refresh",
+                    "Metric Rows": company.get("structured_counts", {}).get("metric_rows", 0),
+                    "Documents": company.get("document_counts", {}).get("documents", 0),
+                    "Embedded Chunks": company.get("embedding_counts", {}).get("updated_chunks", 0),
+                }
+            )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        return
+
     count_cols = st.columns(4)
     count_cols[0].metric("Cache", "Hit" if live_ingestion.get("used_cache") else "Refresh")
     count_cols[1].metric(
@@ -367,10 +431,12 @@ def render_clarification_panel() -> None:
 
     if st.button("Continue Live Analysis"):
         clarification = manual.strip() or selected
+        progress_area = st.container()
         run_analysis(
             st.session_state["pending_question"],
             live_analysis=st.session_state.get("pending_live_analysis", True),
             clarification_response=clarification,
+            progress_container=progress_area,
         )
 
 
@@ -401,14 +467,17 @@ live_analysis = st.toggle(
     help="If off, answer only from companies that are already loaded locally.",
 )
 
-if st.button("Run Analysis", type="primary"):
+run_clicked = st.button("Run Analysis", type="primary")
+run_progress_area = st.container()
+
+if run_clicked:
     clear_pending_clarification()
-    run_analysis(question, live_analysis=live_analysis)
+    run_analysis(question, live_analysis=live_analysis, progress_container=run_progress_area)
 
 if demo_question and demo_run_id and st.session_state.get("last_demo_run_id") != demo_run_id:
     st.session_state["last_demo_run_id"] = demo_run_id
     clear_pending_clarification()
-    run_analysis(question, live_analysis=live_analysis)
+    run_analysis(question, live_analysis=live_analysis, progress_container=run_progress_area)
 
 render_clarification_panel()
 

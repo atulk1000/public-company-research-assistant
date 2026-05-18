@@ -39,3 +39,21 @@ def company_facts_path(ticker: str) -> Path:
 def filing_html_path(ticker: str, filing_date: str, form_type: str, accession_no: str) -> Path:
     safe_form = form_type.replace("/", "-")
     return company_directory(ticker) / "filings" / f"{filing_date}_{safe_form}_{accession_no}.html"
+
+
+def exhibit_html_path(
+    ticker: str,
+    filing_date: str,
+    form_type: str,
+    accession_no: str,
+    exhibit_type: str,
+    filename: str,
+) -> Path:
+    safe_form = form_type.replace("/", "-")
+    safe_exhibit = exhibit_type.replace("/", "-")
+    safe_filename = filename.replace("/", "-").replace("\\", "-")
+    return (
+        company_directory(ticker)
+        / "filings"
+        / f"{filing_date}_{safe_form}_{accession_no}_{safe_exhibit}_{safe_filename}.html"
+    )

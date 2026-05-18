@@ -68,13 +68,17 @@ The result is a system that can answer questions like:
 
 ## Current Scope
 
-Preloaded local demo cache:
+Default local demo universe starts with the Magnificent 7:
 
-- `MSFT`
-- `GOOGL`
+- `AAPL`
 - `AMZN`
+- `GOOGL`
+- `META`
+- `MSFT`
+- `NVDA`
+- `TSLA`
 
-Live mode can additionally resolve and ingest other US public companies on demand, then persist them locally for future cache hits.
+Live mode can additionally resolve and ingest other US public companies on demand, then persist them locally for future cache hits. The local research library is intentionally expandable: it starts with the Magnificent 7 seed set, then grows as live analysis fetches more companies. By default, batch ingestion jobs process every company already present in the local store; `TARGET_TICKERS` is only an optional filter when you want to refresh a smaller set.
 
 Current structured sources:
 
@@ -84,7 +88,7 @@ Current structured sources:
 
 Current unstructured sources:
 
-- recent `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`, `40-F`, `DEF 14A`, and `S-1` / `S-3` / `S-4` filings
+- recent `10-K`, `10-Q`, `8-K`, `20-F`, `6-K`, `40-F`, `DEF 14A`, `DEFM14A`, `PREM14A`, `S-1` / `S-3` / `S-4`, `424B`, `425`, `FWP`, Forms `3` / `4` / `5`, Schedule `13D` / `13G`, `13F-HR`, and tender / merger forms such as `SC TO` and `SC 14D9`
 
 Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), then loaded into Postgres for analysis and retrieval. Those raw SEC files stay local by default because [data/raw](./data/raw) is gitignored.
 
@@ -230,6 +234,43 @@ Important storage tables:
 6. Let the LLM decide whether the question is `sql`, `rag`, or `hybrid`.
 7. Generate SQL when needed, retrieve filing passages when needed, then synthesize the final answer with the LLM.
 
+## Agentic Research Workflow
+
+The current workflow has evolved from SQL/RAG/hybrid routing into a bounded agentic research workflow. The original router still chooses the evidence route (`sql`, `rag`, or `hybrid`), and a higher-level `ResearchAgent` now chooses an execution tier before running the existing tools:
+
+- SQL-fast for simple metric questions
+- RAG-fast for simple filing or commentary questions
+- Hybrid-fast for mixed single-company metric-plus-narrative questions
+- Deep research for multi-company, comparative, ambiguous, or driver-analysis questions
+
+Deep research supports multi-company comparative questions by running company-scoped retrieval, combining SQL and filing evidence where needed, validating coverage before final synthesis, and retrying weak document retrieval with expanded terms within a small fixed budget. The agent maintains an explicit trace/state, including the tier, route, companies, tools used, retries, validation warnings, SQL results, and retrieved document evidence.
+
+Execution is budgeted and bounded. The agent does not invent financial numbers or rely on general model knowledge; final answers remain grounded in SQL results and SEC filing evidence, with missing evidence called out in the limitations.
+
+Example trace for:
+
+```text
+Compare Nvidia and Microsoft AI revenue drivers over the last two years.
+```
+
+```json
+{
+  "question": "Compare Nvidia and Microsoft AI revenue drivers over the last two years.",
+  "tier": "deep_research",
+  "route": "hybrid",
+  "companies": ["NVDA", "MSFT"],
+  "tools_used": ["sql", "rag"],
+  "retries": 0,
+  "validation": {
+    "passed": true,
+    "missing_sql_companies": [],
+    "missing_rag_companies": [],
+    "warnings": [],
+    "needs_retry": false
+  }
+}
+```
+
 ## Live Analysis Flow
 
 When `Use live analysis` is enabled, the request path is:
@@ -258,9 +299,15 @@ Used now:
 - SEC submissions metadata
 - SEC XBRL / company facts
 - SEC-hosted filing documents
+- SEC ownership, proxy, registration/prospectus, tender, merger, and institutional-holdings primary filing documents
+
+Partially covered:
+
+- earnings releases and investor decks when they are filed as `EX-99`, `EX-99.1`, `EX-99.01`, `EX-99.2`, or `EX-99.02` exhibits inside `8-K` / `6-K` filing packages
 
 Not used yet:
 
+- lower-priority exhibit documents such as contracts, XBRL exhibits, certifications, graphics, and PDFs outside the high-value `EX-99.*` family
 - third-party market-data websites
 - unofficial earnings-call transcript sites
 - finance blogs or media summaries
@@ -333,6 +380,8 @@ Load structured SEC data:
 ```powershell
 docker compose run --rm api python ingestion/load_sec_data.py
 ```
+
+By default this refreshes all companies in the local `companies` table, including companies previously fetched by live analysis. To limit a run, set `TARGET_TICKERS`, for example `TARGET_TICKERS=MSFT,NVDA`.
 
 Load filing text and chunk it:
 

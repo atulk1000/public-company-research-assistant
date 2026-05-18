@@ -13,8 +13,31 @@ COMMON_ALIASES_BY_TICKER = {
     "AAPL": ("apple",),
     "AMZN": ("amazon",),
     "GOOGL": ("alphabet", "google"),
+    "META": ("meta", "facebook"),
     "MSFT": ("microsoft",),
     "NBIS": ("nebius",),
+    "NVDA": ("nvidia",),
+    "TSLA": ("tesla",),
+}
+
+TICKER_MENTION_STOPWORDS = {
+    "AI",
+    "API",
+    "CEO",
+    "CFO",
+    "EPS",
+    "FY",
+    "GAAP",
+    "IPO",
+    "LLM",
+    "Q",
+    "QA",
+    "RAG",
+    "SEC",
+    "SQL",
+    "US",
+    "USA",
+    "USD",
 }
 
 
@@ -137,3 +160,15 @@ def alias_to_ticker_map() -> dict[str, str]:
         for alias in entry.aliases:
             mapping[alias] = entry.ticker
     return mapping
+
+
+def extract_ticker_mentions(text: str) -> list[str]:
+    """Return plausible explicit ticker mentions, including unloaded companies."""
+    tickers: list[str] = []
+    for match in re.finditer(r"(?<![A-Za-z0-9$])\$?([A-Z][A-Z0-9.]{0,5})(?![A-Za-z0-9])", text):
+        ticker = match.group(1).replace(".", "-").upper()
+        if ticker in TICKER_MENTION_STOPWORDS:
+            continue
+        if ticker not in tickers:
+            tickers.append(ticker)
+    return tickers

@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.company_universe import DEFAULT_TARGET_TICKER_FILTER, parse_target_tickers
 from ingestion.fetch_company_facts import extract_usd_facts, fetch_company_facts
 from ingestion.fetch_sec_filings import extract_recent_filings, fetch_submissions
 from ingestion.raw_storage import company_facts_path, save_json, submissions_path
@@ -91,28 +92,33 @@ def get_connection():
 
 
 def load_settings() -> IngestionSettings:
-    target_tickers = os.getenv("TARGET_TICKERS", "MSFT,GOOGL,AMZN")
+    target_tickers = os.getenv("TARGET_TICKERS", DEFAULT_TARGET_TICKER_FILTER)
     return IngestionSettings(
         database_url=os.getenv(
             "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/company_assistant"
         ),
-        ticker_list=[
-            ticker.strip().upper() for ticker in target_tickers.split(",") if ticker.strip()
-        ],
+        ticker_list=parse_target_tickers(target_tickers),
     )
 
 
 def load_target_companies(conn: psycopg.Connection, tickers: list[str]) -> list[CompanyRecord]:
     with conn.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT company_id, cik, ticker, name
-            FROM companies
-            WHERE ticker = ANY(%s)
-            ORDER BY ticker;
-            """,
-            (tickers,),
-        )
+        if tickers:
+            cursor.execute(
+                """
+                SELECT company_id, cik, ticker, name
+                FROM companies
+                WHERE ticker = ANY(%s)
+                ORDER BY ticker;
+                """,
+                (tickers,),
+            )
+        else:
+            cursor.execute("""
+                SELECT company_id, cik, ticker, name
+                FROM companies
+                ORDER BY ticker;
+                """)
         rows = cursor.fetchall()
 
     return [CompanyRecord(**row) for row in rows]

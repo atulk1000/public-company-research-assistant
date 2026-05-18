@@ -2,6 +2,12 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.company_universe import (
+    DEFAULT_DEMO_TICKERS,
+    DEFAULT_TARGET_TICKER_FILTER,
+    parse_target_tickers,
+)
+
 
 class Settings(BaseSettings):
     openai_api_key: str = ""
@@ -9,7 +15,8 @@ class Settings(BaseSettings):
     openai_reasoning_effort: str = "low"
     database_url: str = "postgresql://postgres:postgres@localhost:5432/company_assistant"
     embedding_model: str = "text-embedding-3-small"
-    target_tickers: str = "MSFT,GOOGL,AMZN"
+    default_demo_tickers: str = DEFAULT_DEMO_TICKERS
+    target_tickers: str = DEFAULT_TARGET_TICKER_FILTER
     sec_user_agent: str = "Public Company Research Assistant AdminContact@example.com"
     live_cache_hours: int = 24
     sec_reference_cache_hours: int = 24
@@ -19,9 +26,11 @@ class Settings(BaseSettings):
 
     @property
     def ticker_list(self) -> list[str]:
-        return [
-            ticker.strip().upper() for ticker in self.target_tickers.split(",") if ticker.strip()
-        ]
+        return parse_target_tickers(self.target_tickers)
+
+    @property
+    def default_demo_ticker_list(self) -> list[str]:
+        return parse_target_tickers(self.default_demo_tickers)
 
 
 @lru_cache(maxsize=1)
