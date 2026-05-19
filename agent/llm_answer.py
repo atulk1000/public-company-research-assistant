@@ -254,13 +254,22 @@ def format_answer_for_ui(
     formatted = _strip_unresolved_raw_citations(formatted)
     formatted = _strip_existing_evidence_used_section(formatted)
     if not citation_order:
+        if _has_numbered_citations(formatted):
+            return _append_evidence_table(formatted, list(registry.values()))
         return formatted
 
-    rows = ["**Evidence Used**", "", "| # | Evidence |", "|---:|---|"]
-    for index, label in enumerate(citation_order, start=1):
-        rows.append(f"| {index} | {_markdown_table_cell(registry[label])} |")
+    return _append_evidence_table(formatted, [registry[label] for label in citation_order])
 
-    return f"{formatted.rstrip()}\n\n{chr(10).join(rows)}"
+
+def _append_evidence_table(answer: str, evidence_rows: list[str]) -> str:
+    rows = ["**Evidence Used**", "", "| # | Evidence |", "|---:|---|"]
+    for index, evidence in enumerate(evidence_rows, start=1):
+        rows.append(f"| {index} | {_markdown_table_cell(evidence)} |")
+    return f"{answer.rstrip()}\n\n{chr(10).join(rows)}"
+
+
+def _has_numbered_citations(answer: str) -> bool:
+    return bool(re.search(r"\[\d+\]", answer))
 
 
 def _force_section_heading_breaks(answer: str) -> str:
@@ -285,7 +294,27 @@ def _force_section_heading_breaks(answer: str) -> str:
 
 
 def _strip_existing_evidence_used_section(answer: str) -> str:
-    return re.sub(r"(?is)\n*(?:\*\*)?Evidence Used(?:\*\*)?.*$", "", answer).rstrip()
+    return re.sub(
+        r"(?is)(?:\n|\s)*(?:[-*]\s*)?(?:\*\*)?Evidence Used(?:\*\*)?.*$", "", answer
+    ).rstrip()
+
+
+def split_answer_sections(answer: str) -> list[tuple[str, str]]:
+    heading_pattern = re.compile(
+        r"(?m)^\*\*(Bottom Line|Comparison Snapshot|Key Takeaways|What Supports This|Caveats|Evidence Used)\*\*\s*$"
+    )
+    matches = list(heading_pattern.finditer(answer or ""))
+    if not matches:
+        return []
+
+    sections = []
+    for index, match in enumerate(matches):
+        heading = match.group(1)
+        content_start = match.end()
+        content_end = matches[index + 1].start() if index + 1 < len(matches) else len(answer)
+        content = answer[content_start:content_end].strip()
+        sections.append((heading, content))
+    return sections
 
 
 def _markdown_table_cell(value: str) -> str:

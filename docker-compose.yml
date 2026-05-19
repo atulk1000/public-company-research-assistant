@@ -67,5 +67,30 @@ services:
       - ./docs:/app/docs
     command: streamlit run app/ui_streamlit.py --server.port=8501 --server.address=0.0.0.0
 
+  mcp:
+    profiles:
+      - mcp
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: company-assistant-mcp
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./agent:/app/agent
+      - ./retrieval:/app/retrieval
+      - ./db:/app/db
+      - ./data:/app/data
+      - ./ingestion:/app/ingestion
+      - ./mcp_server:/app/mcp_server
+      - ./docs:/app/docs
+    command: python -m mcp_server.server
+
 volumes:
   postgres_data:

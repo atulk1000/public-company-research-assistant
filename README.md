@@ -214,6 +214,7 @@ Key modules:
 - [agent](./agent): company catalog, routing, SQL generation, retrieval, answer composition
 - [retrieval](./retrieval): lexical search and reranking helpers
 - [app](./app): FastAPI API and Streamlit demo UI
+- [mcp_server](./mcp_server): optional MCP interface exposing governed research tools to MCP-compatible clients
 - [evals](./evals): benchmark cases and evaluator for routing, retrieval, citations, and live freshness behavior
 
 Important storage tables:
@@ -290,6 +291,46 @@ Default freshness behavior:
 - SEC company reference cache: 24 hours
 - live company data cache: 24 hours
 - if cached company data is still fresh, live mode reuses it rather than re-ingesting the company
+
+## MCP Interface
+
+The repo includes an optional Model Context Protocol server that exposes the research layer as governed tools for MCP-compatible agents and clients. The MCP server reuses the same Postgres, `pgvector`, SEC ingestion, retrieval, and answer-synthesis code as the Streamlit/API app.
+
+Exposed MCP tools:
+
+- `query_financial_metrics`: read-only structured metrics from `v_company_period_metrics`
+- `retrieve_filing_context`: company-scoped SEC filing retrieval for a topic
+- `refresh_company_data`: explicit one-company SEC refresh through the live ingestion path
+- `compare_company_metrics`: read-only multi-company metric comparison, capped at five tickers
+- `answer_financial_question`: run the existing scoped research agent and return the grounded answer plus trace
+
+Exposed MCP resources:
+
+- `companies://loaded`: companies currently present in the local research store
+- `metrics://schema`: available metric fields and descriptions
+- `sources://sec-policy`: current SEC-only source policy
+- `freshness://companies`: per-company refresh timestamps
+- `agent://capabilities`: exposed tools, limits, and guardrails
+
+The MCP layer is intentionally constrained:
+
+- no arbitrary SQL execution
+- validated tickers and metric allowlists
+- read tools capped by row/chunk limits
+- live refresh is explicit and limited to one company per call
+- final answers still pass through the app's public-company financial scope guard
+
+Run the MCP server locally:
+
+```powershell
+python -m mcp_server.server
+```
+
+Run it through Docker Compose as an opt-in profile:
+
+```powershell
+docker compose --profile mcp run --rm mcp
+```
 
 ## Source Policy
 

@@ -2,6 +2,7 @@ from agent.llm_answer import (
     format_answer_for_ui,
     format_retrieved_evidence,
     normalize_answer_markdown,
+    split_answer_sections,
 )
 from app.prompts import (
     ANSWER_REVIEW_SYSTEM_PROMPT,
@@ -290,3 +291,61 @@ def test_normalize_answer_markdown_extracts_section_heading_table_rows() -> None
     assert "\n\n**Comparison Snapshot**\n\n" in normalized
     assert "\n\n**What Supports This**\n\n" in normalized
     assert normalized.index("**Comparison Snapshot**") < normalized.index("**What Supports This**")
+
+
+def test_format_answer_for_ui_repairs_numbered_answer_with_inline_evidence_table() -> None:
+    answer = (
+        "**Bottom Line** Microsoft and Alphabet both increased AI investment [1][2]. "
+        "**Comparison Snapshot**\n\n"
+        "| Item | Microsoft | Alphabet |\n"
+        "|---|---|---|\n"
+        "| Capex | ~37% [1] | ~32% [2] |\n"
+        "| What Supports This | | |\n"
+        "- Microsoft links spend to AI infrastructure [1].\n"
+        "- Alphabet disclosed TPU commitments [2]. Caveats\n"
+        "- Alphabet has two null capex quarters [3]. Evidence Used | # | Evidence | |---:|---| | 1 | stale |"
+    )
+    structured_evidence = {
+        "rows": [
+            {
+                "ticker": "MSFT",
+                "period_end": "2026-03-31",
+                "capex_pct_revenue": 0.3725,
+            },
+            {
+                "ticker": "GOOGL",
+                "period_end": "2026-03-31",
+                "capex_pct_revenue": 0.3246,
+            },
+            {
+                "ticker": "GOOGL",
+                "period_end": "2025-09-30",
+                "rd_pct_revenue": 0.148,
+            },
+        ]
+    }
+
+    formatted = format_answer_for_ui(
+        answer,
+        structured_evidence,
+        None,
+        question="Compare Microsoft and Alphabet on AI narrative and capex intensity.",
+    )
+
+    assert "| What Supports This |" not in formatted
+    assert "\n\n**What Supports This**\n\n" in formatted
+    assert "\n\n**Caveats**\n\n" in formatted
+    assert "\n\n**Evidence Used**\n\n| # | Evidence |\n|---:|---|" in formatted
+    assert "stale" not in formatted
+    assert "Microsoft links spend to AI infrastructure [1]." in formatted
+
+    sections = split_answer_sections(formatted)
+    assert [heading for heading, _ in sections] == [
+        "Bottom Line",
+        "Comparison Snapshot",
+        "What Supports This",
+        "Caveats",
+        "Evidence Used",
+    ]
+    evidence_content = dict(sections)["Evidence Used"]
+    assert evidence_content.startswith("| # | Evidence |")

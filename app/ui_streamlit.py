@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from agent.hybrid_tool import answer_question
+from agent.llm_answer import format_answer_for_ui, split_answer_sections
 from ingestion.source_registry import STRUCTURED_SOURCE_LABELS, UNSTRUCTURED_SOURCE_LABELS
 
 MOJIBAKE_REPLACEMENTS = {
@@ -42,6 +43,10 @@ def clean_display_text(text: str) -> str:
     cleaned = re.sub(r"\s+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def escape_markdown_math(text: str) -> str:
+    return re.sub(r"(?<!\\)\$", r"\\$", text or "")
 
 
 def format_metric_value(value) -> str:
@@ -234,12 +239,26 @@ def render_route_section(result: dict) -> None:
                     st.warning(clean_display_text(str(warning)))
 
 
-def render_answer_section(result: dict) -> None:
+def render_answer_section(result: dict, question: str | None = None) -> None:
     if result.get("status") != "success":
         return
     st.subheader("Answer")
-    answer = clean_display_text(result.get("answer", ""))
-    st.markdown(answer or "_No answer returned._")
+    answer = format_answer_for_ui(
+        result.get("answer", ""),
+        result.get("structured_evidence"),
+        result.get("retrieved_evidence"),
+        question=question,
+    )
+    answer = clean_display_text(answer)
+    sections = split_answer_sections(answer)
+    if not sections:
+        st.markdown(answer or "_No answer returned._")
+        return
+
+    for heading, content in sections:
+        st.markdown(f"#### {heading}")
+        if content:
+            st.markdown(escape_markdown_math(content))
 
 
 def render_source_policy() -> None:
@@ -485,7 +504,7 @@ result = st.session_state.get("last_result")
 if result:
     render_status_banner(result)
     render_route_section(result)
-    render_answer_section(result)
+    render_answer_section(result, question=question)
 
     evidence_tab, documents_tab, live_tab, debug_tab = st.tabs(
         ["Metrics", "Documents", "Live", "Debug"]

@@ -74,6 +74,7 @@ def run_live_ingestion(
     resolved: ResolvedCompany,
     required_sources: list[str],
     progress_callback: ProgressCallback | None = None,
+    force_refresh: bool = False,
 ) -> LiveIngestResult:
     require_unstructured = "unstructured" in required_sources
     report_progress(
@@ -85,7 +86,7 @@ def run_live_ingestion(
         conn.commit()
 
     report_progress(progress_callback, "cache", "Checking local cache freshness...")
-    if cache_is_fresh(company, require_unstructured=require_unstructured):
+    if not force_refresh and cache_is_fresh(company, require_unstructured=require_unstructured):
         with get_connection() as conn:
             freshness = serialize_freshness(get_company_freshness(conn, company.company_id))
         refresh_company_catalog()
