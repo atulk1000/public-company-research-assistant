@@ -215,7 +215,7 @@ Key modules:
 
 - [ingestion](./ingestion): SEC fetchers, raw-file persistence, filing parsing, chunking, embeddings
 - [db](./db): schema, views, seed data
-- [agent](./agent): company catalog, routing, SQL generation, retrieval, answer composition
+- [agent](./agent): `ResearchAgent` orchestration, company planning, route/tier selection, SQL/RAG tool execution, evidence validation, retries, and answer composition
 - [retrieval](./retrieval): lexical search and reranking helpers
 - [app](./app): FastAPI API and Streamlit demo UI
 - [mcp_server](./mcp_server): optional MCP interface exposing governed research tools to MCP-compatible clients
