@@ -249,6 +249,8 @@ Deep research supports multi-company comparative questions by running company-sc
 
 Execution is budgeted and bounded. The agent does not invent financial numbers or rely on general model knowledge; final answers remain grounded in SQL results and SEC filing evidence, with missing evidence called out in the limitations.
 
+Runtime entrypoints are intentionally split by mode. Cached/default requests use the `ResearchAgent` orchestration layer through `agent.hybrid_tool.answer_question_cached()`. Live analysis supports single-company refresh and multi-company live comparison; single-company live requests use the guarded live-ingestion workflow, while multi-company live requests use a research-plan path that resolves each company, refreshes/reuses cached SEC data, runs cross-company SQL/retrieval, validates evidence coverage, and returns trace metadata when requested.
+
 Example trace for:
 
 ```text
