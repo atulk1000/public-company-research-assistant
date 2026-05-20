@@ -85,53 +85,21 @@ def answer_question_live(
         progress_callback=progress_callback,
     )
 
-    route_reasons = [plan.reasoning, f"resolved_company={resolution.ticker}"]
-    if live_result.used_cache:
-        route_reasons.append("live_ingest=cache_hit")
-    else:
-        route_reasons.append("live_ingest=refreshed")
-
-    requested_tickers = [resolution.ticker]
-    structured_evidence = None
-    retrieved_evidence = None
-
-    if plan.route in {"sql", "hybrid"}:
-        if progress_callback:
-            progress_callback("analysis", "Running structured analysis...")
-        structured_evidence = run_sql(question, requested_tickers=requested_tickers)
-    if plan.route in {"rag", "hybrid"}:
-        if progress_callback:
-            progress_callback("analysis", "Retrieving filing evidence...")
-        retrieved_evidence = retrieve_evidence(question, requested_tickers=requested_tickers)
-
     if progress_callback:
-        progress_callback("answer", "Preparing final answer...")
+        progress_callback("analysis", "Running agentic analysis over prepared data...")
 
-    answer = compose_answer(
-        question,
-        plan.route,
-        route_reasons,
-        structured_evidence,
-        retrieved_evidence,
+    result = ResearchAgent().run_response(question, mode="live", live=True)
+    return _attach_live_metadata(
+        result,
+        planning=plan.model_dump(),
+        resolved_company=resolution.model_dump(),
+        live_ingestion=_live_ingest_payload(live_result),
+        live_reasons=[
+            plan.reasoning,
+            f"resolved_company={resolution.ticker}",
+            f"live_ingest={'cache_hit' if live_result.used_cache else 'refreshed'}",
+        ],
     )
-    return {
-        "status": "success",
-        "mode": "live",
-        "route": plan.route,
-        "route_reasons": route_reasons,
-        "structured_evidence": structured_evidence,
-        "retrieved_evidence": retrieved_evidence,
-        "answer": answer,
-        "planning": plan.model_dump(),
-        "resolved_company": resolution.model_dump(),
-        "live_ingestion": {
-            "used_cache": live_result.used_cache,
-            "structured_counts": live_result.structured_counts,
-            "document_counts": live_result.document_counts,
-            "embedding_counts": live_result.embedding_counts,
-            "freshness": live_result.freshness,
-        },
-    }
 
 
 def answer_question_live_multi_company(
@@ -253,6 +221,50 @@ def _live_ingest_payload(result) -> dict:
     }
 
 
+def _attach_live_metadata(
+    result: dict,
+    *,
+    planning: dict | None = None,
+    resolved_company: dict | None = None,
+    resolved_companies: list[dict] | None = None,
+    live_ingestion: dict | None = None,
+    live_ingestions: list[dict] | None = None,
+    live_reasons: list[str] | None = None,
+) -> dict:
+    result["mode"] = "live"
+    if planning is not None:
+        result["planning"] = planning
+    if resolved_company is not None:
+        result["resolved_company"] = resolved_company
+    if resolved_companies is not None:
+        result["resolved_companies"] = resolved_companies
+    if live_ingestion is not None:
+        result["live_ingestion"] = live_ingestion
+    if live_ingestions is not None:
+        result["live_ingestions"] = live_ingestions
+
+    route_reasons = list(result.get("route_reasons") or [])
+    for reason in live_reasons or []:
+        if reason and reason not in route_reasons:
+            route_reasons.append(reason)
+    result["route_reasons"] = route_reasons
+
+    trace = result.setdefault("agent_trace", _trace_from_response(result))
+    trace["mode"] = "live"
+    trace["live_data_ready"] = True
+    if planning is not None:
+        trace["planning"] = planning
+    if resolved_company is not None:
+        trace["resolved_company"] = resolved_company
+    if resolved_companies is not None:
+        trace["resolved_companies"] = resolved_companies
+    if live_ingestion is not None:
+        trace["live_ingestion"] = live_ingestion
+    if live_ingestions is not None:
+        trace["live_ingestions"] = live_ingestions
+    return result
+
+
 def _aggregate_live_ingestion(results: list) -> dict:
     return {
         "used_cache": all(result.used_cache for result in results),
@@ -327,6 +339,8 @@ def answer_question(
             )
             if return_trace:
                 result.setdefault("agent_trace", _trace_from_response(result))
+            else:
+                result.pop("agent_trace", None)
             return result
         result = answer_question_cached(question)
         if not return_trace:

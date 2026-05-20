@@ -249,7 +249,7 @@ Deep research supports multi-company comparative questions by running company-sc
 
 Execution is budgeted and bounded. The agent does not invent financial numbers or rely on general model knowledge; final answers remain grounded in SQL results and SEC filing evidence, with missing evidence called out in the limitations.
 
-Runtime entrypoints are intentionally split by mode. Cached/default requests use the `ResearchAgent` orchestration layer through `agent.hybrid_tool.answer_question_cached()`. Live analysis supports single-company refresh and multi-company live comparison; single-company live requests use the guarded live-ingestion workflow, while multi-company live requests use a research-plan path that resolves each company, refreshes/reuses cached SEC data, runs cross-company SQL/retrieval, validates evidence coverage, and returns trace metadata when requested.
+Runtime entrypoints now share the same answer orchestration layer. Cached/default requests use `ResearchAgent` through `agent.hybrid_tool.answer_question_cached()`. Live single-company requests first resolve the company and refresh/reuse SEC data through the guarded live-ingestion workflow, then call `ResearchAgent.run_response(..., mode="live", live=True)` over the prepared local store. Live multi-company requests keep the research-plan ingestion path for resolving and preparing each company, with trace metadata returned when requested.
 
 Example trace for:
 
@@ -548,7 +548,7 @@ Invoke-RestMethod -Method Post `
 If someone is inspecting the repo quickly, the highest-signal places to look are:
 
 - [app/ui_streamlit.py](./app/ui_streamlit.py): user-facing flow, live toggle, source policy, evidence rendering
-- [agent/hybrid_tool.py](./agent/hybrid_tool.py): top-level entrypoint that delegates cached requests to `ResearchAgent` and live requests to the guarded ingestion flow
+- [agent/hybrid_tool.py](./agent/hybrid_tool.py): top-level entrypoint that prepares live data and delegates cached/live answers to `ResearchAgent`
 - [agent/sql_tool.py](./agent/sql_tool.py): LLM-assisted SQL generation with local execution
 - [agent/rag_tool.py](./agent/rag_tool.py): retrieval over stored filing chunks
 - [ingestion/live_ingest.py](./ingestion/live_ingest.py): on-demand company ingest and cache decisions

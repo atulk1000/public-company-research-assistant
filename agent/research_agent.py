@@ -138,7 +138,7 @@ class ResearchAgent:
             f"budget={budgets}",
         ]
         if live:
-            state.warnings.append("Live ingestion remains handled by the existing live workflow.")
+            state.warnings.append("Live data was resolved and prepared before agent execution.")
 
         if decision.tier == "deep_research":
             self._run_deep_research(state, route_reasons, budgets)
