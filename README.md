@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/atulk1000/public-company-research-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/atulk1000/public-company-research-assistant/actions/workflows/ci.yml)
 
-A hybrid SQL + RAG research assistant for US public companies. It ingests structured SEC/XBRL metrics and unstructured SEC filing text, routes questions across SQL, retrieval, or both, and uses an LLM to produce grounded answers with citations and limitations.
+A hybrid SQL + RAG research assistant for US public companies. It ingests structured SEC/XBRL metrics and unstructured SEC filing text, then uses a bounded `ResearchAgent` to plan each question, choose SQL, retrieval, or hybrid execution, validate evidence, and produce grounded answers with citations and limitations.
 
 This is intentionally built as a real data system rather than a thin chatbot wrapper:
 
@@ -24,7 +24,7 @@ Current source policy:
 - unstructured filing ingestion, cleaning, and chunking
 - real embeddings stored in `pgvector`
 - hybrid retrieval across lexical and vector signals
-- LLM-based routing, SQL generation, and final answer synthesis
+- `ResearchAgent` orchestration for planning, route/tier selection, evidence validation, retries, and answer synthesis
 - evidence-backed answers over both numeric and text sources
 - on-demand company resolution, ingestion, and local caching
 - per-company freshness tracking for structured data, documents, and embeddings
@@ -98,7 +98,7 @@ Raw source files are persisted on disk under [data/raw/sec](./data/raw/sec), the
 The Streamlit app has two user-facing modes:
 
 - `Use live analysis` off: answer only from companies that are already loaded in the local Postgres + `pgvector` store
-- `Use live analysis` on: resolve the company from the question, intelligently select and fetch the most relevant official SEC sources for that company, then run SQL, retrieval, or hybrid analysis
+- `Use live analysis` on: resolve the company set from the question, fetch or reuse official SEC data, then pass the refreshed local store into `ResearchAgent` for SQL, retrieval, or hybrid analysis
 
 The current app prompt is:
 
@@ -110,8 +110,8 @@ In live mode, the app may:
 2. validate it against the SEC company reference list
 3. check whether the company is already cached locally and still fresh
 4. ingest or refresh that company locally if needed
-5. run SQL, RAG, or hybrid analysis
-6. return a grounded answer with evidence and limitations
+5. pass the prepared local store into `ResearchAgent`
+6. let the agent run SQL, RAG, or hybrid analysis, validate evidence, and return a grounded answer with limitations
 
 The live path supports both single-company and multi-company questions. Cold starts are slower, but every fetched company stays in the local store for future reuse.
 
@@ -201,7 +201,11 @@ Postgres + pgvector
   - company_data_freshness
         |
         v
-LLM router -> SQL tool / retrieval tool / hybrid orchestration
+ResearchAgent
+  - research plan
+  - route + tier decision
+  - SQL / retrieval / hybrid execution
+  - evidence validation + retries
         |
         v
 LLM answer synthesis with citations and limitations
@@ -233,8 +237,8 @@ Important storage tables:
 3. Normalize facts and compute derived metrics in Postgres.
 4. Parse filing text, chunk it, and store chunk embeddings in `pgvector`.
 5. Ask a question through the API or Streamlit UI.
-6. Let the LLM decide whether the question is `sql`, `rag`, or `hybrid`.
-7. Generate SQL when needed, retrieve filing passages when needed, then synthesize the final answer with the LLM.
+6. Let `ResearchAgent` create a plan, choose `sql`, `rag`, `hybrid`, or `deep_research`, and set bounded execution budgets.
+7. Generate SQL when needed, retrieve filing passages when needed, validate evidence coverage, and synthesize the final answer with the LLM.
 
 ## Agentic Research Workflow
 
@@ -283,8 +287,8 @@ When `Use live analysis` is enabled, the request path is:
 2. resolver validates the company against the cached SEC company list
 3. the app checks `company_data_freshness` to see whether local structured data, documents, and embeddings are still fresh
 4. if needed, it fetches official SEC data for that company and loads it into Postgres / `pgvector`
-5. SQL, retrieval, or hybrid analysis runs against the refreshed local store
-6. the LLM writes the final answer from the retrieved evidence
+5. the refreshed local store is passed into `ResearchAgent`
+6. the agent runs SQL, retrieval, or hybrid analysis, validates evidence coverage, and synthesizes the final answer from grounded evidence
 
 This lets the app stay lightweight locally while still supporting on-demand analysis for companies that are not part of the default seed set.
 
