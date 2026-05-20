@@ -145,6 +145,7 @@ def run_analysis(
         live_analysis=live_analysis,
         clarification_response=clarification_response,
         progress_callback=reporter,
+        return_trace=True,
     )
     if progress_bar is not None and result.get("status") == "success":
         progress_bar.progress(100)

@@ -546,7 +546,7 @@ Invoke-RestMethod -Method Post `
 If someone is inspecting the repo quickly, the highest-signal places to look are:
 
 - [app/ui_streamlit.py](./app/ui_streamlit.py): user-facing flow, live toggle, source policy, evidence rendering
-- [agent/hybrid_tool.py](./agent/hybrid_tool.py): top-level cached vs live orchestration
+- [agent/hybrid_tool.py](./agent/hybrid_tool.py): top-level entrypoint that delegates cached requests to `ResearchAgent` and live requests to the guarded ingestion flow
 - [agent/sql_tool.py](./agent/sql_tool.py): LLM-assisted SQL generation with local execution
 - [agent/rag_tool.py](./agent/rag_tool.py): retrieval over stored filing chunks
 - [ingestion/live_ingest.py](./ingestion/live_ingest.py): on-demand company ingest and cache decisions

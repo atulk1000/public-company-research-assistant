@@ -10,6 +10,7 @@ class QuestionRequest(BaseModel):
     question: str
     live_analysis: bool = False
     clarification_response: str | None = None
+    return_trace: bool = False
 
 
 @app.get("/health")
@@ -23,4 +24,5 @@ def ask_question(request: QuestionRequest) -> dict:
         request.question,
         live_analysis=request.live_analysis,
         clarification_response=request.clarification_response,
+        return_trace=request.return_trace,
     )

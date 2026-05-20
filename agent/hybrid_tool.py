@@ -272,6 +272,21 @@ def _aggregate_live_ingestion(results: list) -> dict:
     }
 
 
+def _trace_from_response(result: dict) -> dict:
+    return {
+        "mode": result.get("mode"),
+        "route": result.get("route"),
+        "status": result.get("status"),
+        "route_reasons": result.get("route_reasons") or [],
+        "research_plan": result.get("research_plan") or result.get("planning"),
+        "plan_validation": result.get("plan_validation"),
+        "resolved_company": result.get("resolved_company"),
+        "resolved_companies": result.get("resolved_companies"),
+        "live_ingestion": result.get("live_ingestion"),
+        "live_ingestions": result.get("live_ingestions"),
+    }
+
+
 def answer_question(
     question: str,
     live_analysis: bool = False,
@@ -283,7 +298,7 @@ def answer_question(
         scope_decision = decide_scope(question)
         scope_plan = create_research_plan(question, scope_decision=scope_decision)
         if not scope_plan.in_scope:
-            return {
+            result = {
                 "status": "out_of_scope",
                 "mode": "live" if live_analysis else "cached",
                 "route": "out_of_scope",
@@ -301,12 +316,18 @@ def answer_question(
                     "needs_retry": False,
                 },
             }
+            if return_trace:
+                result["agent_trace"] = _trace_from_response(result)
+            return result
         if live_analysis:
-            return answer_question_live(
+            result = answer_question_live(
                 question,
                 clarification_response=clarification_response,
                 progress_callback=progress_callback,
             )
+            if return_trace:
+                result.setdefault("agent_trace", _trace_from_response(result))
+            return result
         result = answer_question_cached(question)
         if not return_trace:
             result.pop("agent_trace", None)
