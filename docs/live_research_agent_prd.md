@@ -1,12 +1,12 @@
 # Live ResearchAgent Integration PRD
 
-Status: Phase 1 through Phase 3 are implemented for single-company live mode. Phase 4 remains a follow-up for fully migrating the multi-company live path to `ResearchAgent`.
+Status: Phase 1 through Phase 4 are implemented. Live mode prepares SEC data first, then delegates both single-company and multi-company answering to `ResearchAgent`.
 
 ## Overview
 
 Unify live-mode answer synthesis with the existing `ResearchAgent` orchestration layer while keeping live ingestion as a separate guarded data-loading workflow.
 
-Today, cached/default mode uses `ResearchAgent` for tiering, route selection, SQL/RAG/deep-research execution, evidence validation, retries, answer synthesis, and trace output. Single-company live mode now resolves and refreshes company data before calling `ResearchAgent` over the prepared local store. Multi-company live comparisons still use the existing research-plan ingestion path and remain the main follow-up for full unification.
+Today, cached/default mode uses `ResearchAgent` for tiering, route selection, SQL/RAG/deep-research execution, evidence validation, retries, answer synthesis, and trace output. Live mode now resolves and refreshes company data before calling `ResearchAgent` over the prepared local store. Multi-company live comparisons reuse the precomputed research plan so the agent performs the cross-company SQL/RAG execution and validation after ingestion.
 
 The proposed change is:
 
@@ -18,20 +18,20 @@ This keeps ingestion operationally safe while making cached and live answering b
 
 ## Problem
 
-The architecture is now mostly unified, with one remaining split:
+The architecture is now unified around one answering layer:
 
 - Cached/default mode is `ResearchAgent`-driven.
 - Live single-company mode resolves and ingests data, then answers through `ResearchAgent`.
-- Live multi-company mode still uses a research-plan path with cross-company SQL/RAG and validation.
-- MCP can request trace output; single-company live traces now include both live-ingestion metadata and the agent state, while multi-company live traces remain a compatibility wrapper around the existing live workflow.
+- Live multi-company mode resolves and ingests each planned company, then answers through `ResearchAgent` using the precomputed research plan.
+- MCP can request trace output; live traces include both live-ingestion metadata and the agent state.
 
-That split is acceptable, but it creates reviewer questions:
+The implementation is intended to answer these reviewer questions directly in code:
 
 - Does live mode use the same tiering and evidence-validation behavior as cached mode?
 - Are live answers and cached answers synthesized through the same control loop?
 - Is `ResearchAgent` the main product architecture, or only a cached-mode layer?
 
-The product should answer those questions directly in code.
+The remaining decisions are now polish and ergonomics, not core architecture blockers.
 
 ## Goals
 
@@ -95,7 +95,7 @@ agent.hybrid_tool.answer_question(...)
 answer_question_live(...)
         |
         v
-resolve company -> run live ingestion -> run SQL/RAG -> compose answer
+resolve company -> run live ingestion -> ResearchAgent.run_response(...)
 ```
 
 ```text
@@ -108,7 +108,7 @@ answer_question_live(...)
 answer_question_live_multi_company(...)
         |
         v
-resolve companies -> run live ingestion per company -> run cross-company SQL/RAG -> validate -> compose answer
+resolve companies -> run live ingestion per company -> ResearchAgent.run_response(...)
 ```
 
 ## Proposed Architecture
@@ -199,14 +199,7 @@ Expected behavior:
 
 ### 5. Multi-Company Live Behavior
 
-Multi-company live mode can be migrated in the same PR or in a follow-up PR.
-
-Minimum acceptable first implementation:
-
-- keep the existing `answer_question_live_multi_company()` behavior;
-- add a compatibility wrapper so its returned trace shape matches `ResearchAgent` responses.
-
-Preferred implementation:
+Multi-company live mode should use the same ingestion-before-agent pattern as single-company live mode.
 
 - resolve and ingest all planned companies;
 - call `ResearchAgent.run_response(..., mode="live", live=True)`;
@@ -313,7 +306,7 @@ It should:
 
 Update `answer_question(..., live_analysis=True)` so single-company live requests use the new helper.
 
-Keep multi-company live behavior unchanged unless Phase 4 is implemented in the same PR.
+Single-company live mode should keep existing clarification and not-found behavior while using `ResearchAgent` after ingestion.
 
 ### Phase 4: Route Multi-Company Live Through Agent
 
@@ -366,13 +359,12 @@ pytest
 | Double planning creates inconsistent company lists | Reuse the same `ResearchPlan` where possible or pass the plan into `ResearchAgent` through an injectable planner. |
 | Live ingestion succeeds but agent cannot find evidence | Preserve current validation warnings and caveat missing evidence in the final answer. |
 | Streamlit progress becomes less accurate | Keep progress callbacks in live preparation and add a final agent execution progress step. |
-| Multi-company live migration changes behavior too much | Ship single-company migration first; keep multi-company path stable until tests are stronger. |
+| Multi-company live migration changes behavior too much | Preserve the existing resolution and ingestion behavior, and test that agent execution happens after all companies are prepared. |
 | Trace payload grows too large | Summarize ingestion counts at top level and keep full per-company details only in `agent_trace`. |
 
 ## Open Questions
 
 - Should `ResearchAgent.run_response()` accept a precomputed `ResearchPlan` to avoid planning twice after live preparation?
 - Should live mode expose `force_refresh` through API/MCP, or keep it internal for now?
-- Should multi-company live migration happen in the first implementation PR or a follow-up?
 - Should `agent_trace` include full retrieved evidence, or only evidence summaries for API/MCP consumers?
 - Should Streamlit show live-ingestion metadata separately from the agent trace, or only in the debug payload?

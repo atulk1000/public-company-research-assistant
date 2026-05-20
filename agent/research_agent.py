@@ -140,7 +140,7 @@ class ResearchAgent:
         if live:
             state.warnings.append("Live data was resolved and prepared before agent execution.")
 
-        if decision.tier == "deep_research":
+        if state.tier == "deep_research":
             self._run_deep_research(state, route_reasons, budgets)
         else:
             self._run_fast_path(state, route_reasons, budgets)

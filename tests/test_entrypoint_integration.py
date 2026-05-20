@@ -151,16 +151,8 @@ def test_single_company_live_ingests_before_research_agent(monkeypatch) -> None:
     monkeypatch.setattr(hybrid_tool, "resolve_company", fake_resolve_company)
     monkeypatch.setattr(hybrid_tool, "run_live_ingestion", fake_run_live_ingestion)
     monkeypatch.setattr(hybrid_tool, "ResearchAgent", FakeResearchAgent)
-    monkeypatch.setattr(
-        hybrid_tool,
-        "run_sql",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("old SQL path used")),
-    )
-    monkeypatch.setattr(
-        hybrid_tool,
-        "retrieve_evidence",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("old RAG path used")),
-    )
+    assert not hasattr(hybrid_tool, "run_sql")
+    assert not hasattr(hybrid_tool, "retrieve_evidence")
 
     result = hybrid_tool.answer_question(
         "What does Microsoft say about AI revenue drivers?",
@@ -254,6 +246,32 @@ def test_single_company_live_hides_agent_trace_by_default(monkeypatch) -> None:
     assert result["mode"] == "live"
     assert result["live_ingestion"]["used_cache"] is True
     assert "agent_trace" not in result
+
+
+def test_live_out_of_scope_does_not_ingest_or_run_agent(monkeypatch) -> None:
+    import agent.hybrid_tool as hybrid_tool
+
+    monkeypatch.setattr(
+        hybrid_tool,
+        "run_live_ingestion",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("live ingestion should not run")
+        ),
+    )
+    monkeypatch.setattr(
+        hybrid_tool,
+        "ResearchAgent",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("agent should not run for out-of-scope questions")
+        ),
+    )
+
+    result = hybrid_tool.answer_question("Can you write me a pasta recipe?", live_analysis=True)
+
+    assert result["status"] == "out_of_scope"
+    assert result["mode"] == "live"
+    assert result["structured_evidence"] is None
+    assert result["retrieved_evidence"] is None
 
 
 def test_api_passes_return_trace_to_answer_question(monkeypatch) -> None:

@@ -3,15 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from agent.company_resolver import resolve_company
-from agent.llm_answer import compose_answer
-from agent.plan_validator import validate_plan_evidence
 from agent.planner import plan_question
-from agent.rag_tool import retrieve_evidence
 from agent.research_agent import ResearchAgent
 from agent.research_plan import ResearchPlan
-from agent.research_planner import create_research_plan, plan_context_question
+from agent.research_planner import create_research_plan
 from agent.scope import decide_scope
-from agent.sql_tool import run_sql
 from ingestion.live_ingest import run_live_ingestion
 
 ProgressCallback = Callable[[str, str], None]
@@ -146,67 +142,29 @@ def answer_question_live_multi_company(
             )
         )
 
-    requested_tickers = [resolution.ticker for resolution in resolutions]
-    route_reasons = [
+    live_reasons = [
         research_plan.rationale,
         f"research_plan=tier:{research_plan.tier_hint}",
-        "resolved_companies=" + ",".join(requested_tickers),
+        "resolved_companies=" + ",".join(resolution.ticker for resolution in resolutions),
     ]
-    route_reasons.extend(
+    live_reasons.extend(
         f"live_ingest:{result.ticker}={'cache_hit' if result.used_cache else 'refreshed'}"
         for result in live_results
     )
 
-    structured_evidence = None
-    retrieved_evidence = None
-    analysis_question = plan_context_question(research_plan)
-
-    if research_plan.route_hint in {"sql", "hybrid"}:
-        if progress_callback:
-            progress_callback("analysis", "Running structured multi-company analysis...")
-        structured_evidence = run_sql(analysis_question, requested_tickers=requested_tickers)
-
-    if research_plan.route_hint in {"rag", "hybrid"}:
-        if progress_callback:
-            progress_callback("analysis", "Retrieving multi-company filing evidence...")
-        retrieved_evidence = retrieve_evidence(
-            analysis_question,
-            top_k=max(6, 6 * len(requested_tickers)),
-            requested_tickers=requested_tickers,
-        )
-
-    plan_validation = validate_plan_evidence(
-        research_plan,
-        structured_evidence,
-        retrieved_evidence,
-    )
-    route_reasons.extend(plan_validation.get("warnings", []))
-
     if progress_callback:
-        progress_callback("answer", "Preparing final answer...")
+        progress_callback("analysis", "Running agentic multi-company analysis...")
 
-    answer = compose_answer(
-        question,
-        research_plan.route_hint,
-        route_reasons,
-        structured_evidence,
-        retrieved_evidence,
+    result = ResearchAgent(research_planner=lambda _: research_plan).run_response(
+        question, mode="live", live=True
     )
-
-    return {
-        "status": "success",
-        "mode": "live",
-        "route": research_plan.route_hint,
-        "route_reasons": route_reasons,
-        "structured_evidence": structured_evidence,
-        "retrieved_evidence": retrieved_evidence,
-        "answer": answer,
-        "research_plan": research_plan.to_trace_dict(),
-        "plan_validation": plan_validation,
-        "resolved_companies": [resolution.model_dump() for resolution in resolutions],
-        "live_ingestions": [_live_ingest_payload(result) for result in live_results],
-        "live_ingestion": _aggregate_live_ingestion(live_results),
-    }
+    return _attach_live_metadata(
+        result,
+        resolved_companies=[resolution.model_dump() for resolution in resolutions],
+        live_ingestions=[_live_ingest_payload(result) for result in live_results],
+        live_ingestion=_aggregate_live_ingestion(live_results),
+        live_reasons=live_reasons,
+    )
 
 
 def _live_ingest_payload(result) -> dict:
